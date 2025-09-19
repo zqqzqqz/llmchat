@@ -78,6 +78,9 @@ export interface ChatOptions {
   detail?: boolean;
   temperature?: number;
   maxTokens?: number;
+  // FastGPT 特有参数
+  variables?: Record<string, any>; // 模块变量，会替换模块中输入框内容里的 [key]
+  responseChatItemId?: string;     // 响应消息的 ID，FastGPT 会自动将该 ID 存入数据库
 }
 
 /**

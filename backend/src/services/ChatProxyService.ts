@@ -30,7 +30,7 @@ export class FastGPTProvider implements AIProvider {
 
   transformRequest(messages: ChatMessage[], config: AgentConfig, stream: boolean = false, options?: ChatOptions) {
     const request: any = {
-      chatId: options?.chatId,
+      chatId: options?.chatId || `chat_${Date.now()}`,
       stream: stream && config.features.streamingConfig.enabled,
       detail: options?.detail || false,
       messages: messages.map(msg => ({
@@ -38,6 +38,15 @@ export class FastGPTProvider implements AIProvider {
         content: msg.content,
       })),
     };
+
+    // 添加 FastGPT 特有参数支持
+    if (options?.variables) {
+      request.variables = options.variables;
+    }
+    
+    if (options?.responseChatItemId) {
+      request.responseChatItemId = options.responseChatItemId;
+    }
 
     // 添加系统消息
     if (config.systemPrompt) {
@@ -47,6 +56,7 @@ export class FastGPTProvider implements AIProvider {
       });
     }
 
+    console.log('FastGPT 请求数据:', JSON.stringify(request, null, 2));
     return request;
   }
 
@@ -353,7 +363,7 @@ export class ChatProxyService {
   }
 
   /**
-   * 处理流式响应
+   * 处理流式响应 - 修复 FastGPT SSE 事件解析
    */
   private async handleStreamResponse(
     stream: any,
@@ -364,51 +374,109 @@ export class ChatProxyService {
   ): Promise<void> {
     return new Promise((resolve, reject) => {
       let buffer = '';
+      let currentEventType = ''; // 追踪当前事件类型
+
+      console.log('开始处理流式响应，提供商:', config.provider);
 
       stream.on('data', (chunk: Buffer) => {
-        buffer += chunk.toString();
+        const chunkStr = chunk.toString();
+        buffer += chunkStr;
+        console.log('收到流式数据块:', chunkStr.substring(0, 200));
+        
         const lines = buffer.split('\n');
         buffer = lines.pop() || '';
 
         for (const line of lines) {
-          if (line.trim() === '') continue;
+          if (line.trim() === '') {
+            // 空行重置事件类型
+            currentEventType = '';
+            continue;
+          }
           
           try {
-            // 处理SSE格式
-            const sseData = line.startsWith('data: ') ? line.slice(6) : line;
-            
-            if (sseData === '[DONE]') {
-              onStatusChange?.({
-                type: 'complete',
-                status: 'completed',
-              });
-              resolve();
-              return;
+            // 处理 FastGPT 官方 SSE 格式
+            if (line.startsWith('event: ')) {
+              currentEventType = line.slice(7).trim();
+              console.log('检测到事件类型:', currentEventType);
+              continue;
             }
-
-            const data = JSON.parse(sseData);
             
-            // 处理内容块
-            const content = provider.transformStreamResponse(data);
-            if (content) {
-              onChunk(content);
-            }
+            if (line.startsWith('data: ')) {
+              const dataStr = line.slice(6);
+              console.log('处理数据行:', { eventType: currentEventType, data: dataStr.substring(0, 100) });
+              
+              if (dataStr === '[DONE]') {
+                console.log('流式响应完成');
+                onStatusChange?.({
+                  type: 'complete',
+                  status: 'completed',
+                });
+                resolve();
+                return;
+              }
 
-            // 处理状态事件（仅FastGPT支持）
-            if (config.features.streamingConfig.statusEvents && data.event) {
-              onStatusChange?.({
-                type: 'flowNodeStatus',
-                status: data.event.status,
-                moduleName: data.event.moduleName,
-              });
+              const data = JSON.parse(dataStr);
+              
+              // 根据事件类型处理数据 - 特别针对 FastGPT
+              if (config.provider === 'fastgpt' && config.features.streamingConfig.statusEvents) {
+                console.log('处理 FastGPT 事件:', { eventType: currentEventType, data });
+                
+                switch (currentEventType) {
+                  case 'flowNodeStatus':
+                    // FastGPT 流程节点状态事件
+                    const statusEvent = {
+                      type: 'flowNodeStatus' as const,
+                      status: data.status || 'running' as const,
+                      moduleName: data.name || data.moduleName || '未知模块',
+                    };
+                    console.log('发送流程节点状态:', statusEvent);
+                    onStatusChange?.(statusEvent);
+                    break;
+                  
+                  case 'answer':
+                    // FastGPT 答案内容事件
+                    const answerContent = data.choices?.[0]?.delta?.content || data.content || '';
+                    if (answerContent) {
+                      console.log('发送答案内容:', answerContent.substring(0, 50));
+                      onChunk(answerContent);
+                    }
+                    break;
+                  
+                  case 'flowResponses':
+                    // FastGPT 流程响应事件（详细执行信息）
+                    console.log('流程响应事件:', data);
+                    onStatusChange?.({
+                      type: 'progress',
+                      status: 'completed',
+                      moduleName: '执行完成',
+                    });
+                    break;
+                  
+                  default:
+                    // 处理标准流式响应（非特定事件）
+                    const defaultContent = provider.transformStreamResponse(data);
+                    if (defaultContent) {
+                      console.log('默认内容处理:', defaultContent.substring(0, 50));
+                      onChunk(defaultContent);
+                    }
+                }
+              } else {
+                // 非 FastGPT 或未启用状态事件的标准处理
+                const content = provider.transformStreamResponse(data);
+                if (content) {
+                  console.log('标准内容处理:', content.substring(0, 50));
+                  onChunk(content);
+                }
+              }
             }
           } catch (parseError) {
-            console.warn('解析流式数据失败:', parseError);
+            console.warn('解析流式数据失败:', parseError, '原始行:', line);
           }
         }
       });
 
       stream.on('end', () => {
+        console.log('流式响应结束');
         onStatusChange?.({
           type: 'complete',
           status: 'completed',
@@ -417,6 +485,7 @@ export class ChatProxyService {
       });
 
       stream.on('error', (error: Error) => {
+        console.error('流式响应错误:', error);
         onStatusChange?.({
           type: 'error',
           status: 'error',

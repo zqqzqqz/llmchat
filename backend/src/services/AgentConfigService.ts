@@ -120,13 +120,18 @@ export class AgentConfigService {
       error = err instanceof Error ? err.message : '健康检查失败';
     }
 
-    return {
+    const result: AgentHealthStatus = {
       agentId: id,
       status,
       responseTime: Date.now() - startTime,
       lastChecked: new Date().toISOString(),
-      error,
     };
+
+    if (error) {
+      result.error = error;
+    }
+
+    return result;
   }
 
   /**
@@ -158,7 +163,11 @@ export class AgentConfigService {
 
     // 检查endpoint格式
     try {
-      new URL(config.endpoint);
+      // 如果没有协议前缀，添加 https://
+      const endpointUrl = config.endpoint.startsWith('http') 
+        ? config.endpoint 
+        : `https://${config.endpoint}`;
+      new URL(endpointUrl);
     } catch {
       console.error(`无效的endpoint URL: ${config.endpoint}`);
       return false;

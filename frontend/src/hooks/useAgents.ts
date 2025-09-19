@@ -1,10 +1,11 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { agentService } from '@/services/api';
 import { useChatStore } from '@/store/chatStore';
 
 export const useAgents = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
   
   const { 
     setAgents, 
@@ -15,6 +16,13 @@ export const useAgents = () => {
   } = useChatStore();
 
   const fetchAgents = useCallback(async () => {
+    // 取消上一次请求
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    
+    abortControllerRef.current = new AbortController();
+    
     setLoading(true);
     setAgentsLoading(true);
     setError(null);
@@ -22,16 +30,27 @@ export const useAgents = () => {
 
     try {
       const agents = await agentService.getAgents();
+      
+      // 检查请求是否被取消
+      if (abortControllerRef.current?.signal.aborted) {
+        return;
+      }
+      
       setAgents(agents);
       
       // 如果没有当前智能体，自动选择第一个可用的
       if (!currentAgent && agents.length > 0) {
-        const firstActive = agents.find(agent => agent.status === 'active');
+        const firstActive = agents.find(agent => agent.status === 'active') || agents[0];
         if (firstActive) {
           setCurrentAgent(firstActive);
         }
       }
     } catch (err) {
+      // 如果是取消操作，不处理错误
+      if (err instanceof Error && err.name === 'AbortError') {
+        return;
+      }
+      
       const errorMessage = err instanceof Error ? err.message : '获取智能体列表失败';
       setError(errorMessage);
       setAgentsError(errorMessage);
