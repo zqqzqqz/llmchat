@@ -343,8 +343,105 @@ data: [详细的模块执行信息]
 - **认证失败**：检查 API Key 是否正确，确保使用应用特定的 key
 - **参数错误**：检查必填参数是否完整，参数格式是否正确
 
----
 
-**文档来源**：[FastGPT 官方文档](https://doc.fastgpt.cn/docs/introduction/development/openapi/chat)
+## 交互节点响应
+如果工作流中包含交互节点，依然是调用该 API 接口，需要设置detail=true，并可以从event=interactive的数据中获取交互节点的配置信息。如果是stream=false，则可以从 choice 中获取type=interactive的元素，获取交互节点的选择信息。
+当你调用一个带交互节点的工作流时，如果工作流遇到了交互节点，那么会直接返回，你可以得到下面的信息：
+### 用户选择示例
+{
+  "interactive": {
+    "type": "userSelect",
+    "params": {
+      "description": "测试",
+      "userSelectOptions": [
+        {
+          "value": "Confirm",
+          "key": "option1"
+        },
+        {
+          "value": "Cancel",
+          "key": "option2"
+        }
+      ]
+    }
+  }
+}
+### 表单输入示例
+{
+  "interactive": {
+    "type": "userInput",
+    "params": {
+      "description": "测试",
+      "inputForm": [
+        {
+          "type": "input",
+          "key": "测试 1",
+          "label": "测试 1",
+          "description": "",
+          "value": "",
+          "defaultValue": "",
+          "valueType": "string",
+          "required": false,
+          "list": [
+            {
+              "label": "",
+              "value": ""
+            }
+          ]
+        },
+        {
+          "type": "numberInput",
+          "key": "测试 2",
+          "label": "测试 2",
+          "description": "",
+          "value": "",
+          "defaultValue": "",
+          "valueType": "number",
+          "required": false,
+          "list": [
+            {
+              "label": "",
+              "value": ""
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
+## 交互节点继续运行
+紧接着上一节，当你接收到交互节点信息后，可以根据这些数据进行 UI 渲染，引导用户输入或选择相关信息。然后需要再次发起对话，来继续工作流。调用的接口与仍是该接口，你需要按以下格式来发起请求
 
-**最后更新**：2025-09-18
+### 用户选择示例
+对于用户选择，你只需要直接传递一个选择的结果给 messages 即可。
+curl --location --request POST 'https://localhost:3000/api/v1/chat/completions' \
+--header 'Authorization: Bearer fastgpt-xxx' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+    "stream": true,
+    "detail": true,
+    "chatId":"22222231",
+    "messages": [
+        {
+            "role": "user",
+            "content": "Confirm"
+        }
+    ]
+}'
+
+### 表单输入示例
+表单输入稍微麻烦一点，需要将输入的内容，以对象形式并序列化成字符串，作为messages的值。对象的 key 对应表单的 key，value 为用户输入的值。务必确保chatId是一致的。
+curl --location --request POST 'https://localhost:3000/api/v1/chat/completions' \
+--header 'Authorization: Bearer fastgpt-xxxx' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+    "stream": true,
+    "detail": true,
+    "chatId":"22231",
+    "messages": [
+        {
+            "role": "user",
+            "content": "{\"测试 1\":\"这是输入框的内容\",\"测试 2\":666}"
+        }
+    ]
+}'

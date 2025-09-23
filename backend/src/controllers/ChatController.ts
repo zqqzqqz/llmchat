@@ -380,7 +380,7 @@ export class ChatController {
         chatId,
         // 内容回调 - 流式输出开场白
         (chunk: string) => {
-          console.log('📨 收到开场白内容块:', chunk.substring(0, 20));
+          // console.log('📨 收到开场白内容块:', chunk.substring(0, 20));
           this.sendSSEEvent(res, 'chunk', { content: chunk });
         },
         // 完成回调 - 返回完整初始化数据

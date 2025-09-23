@@ -84,8 +84,11 @@ export class ChatInitService {
         return;
       }
 
+      // 在流式输出前进行换行规范化，将字面量 "\n"/"\r\n" 转换为真实换行符
+      const normalizedWelcomeText = this.normalizeWelcomeText(welcomeText);
+
       // 流式输出开场白文本
-      await this.streamWelcomeText(welcomeText, onChunk);
+      await this.streamWelcomeText(normalizedWelcomeText, onChunk);
       
       // 流式输出完成后，返回完整数据
       onComplete(initData);
@@ -160,6 +163,22 @@ export class ChatInitService {
         await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
+  }
+
+  // 将字面量换行标记标准化为真实换行，且统一为 \n
+  private normalizeWelcomeText(text: string): string {
+    if (!text) return '';
+    return text
+      // 已经存在的真实 CRLF -> LF
+      .replace(/\r\n/g, '\n')
+      // 字面量 "\\r\\n" -> LF
+      .replace(/\\r\\n/g, '\n')
+      // 字面量 "\\n" -> LF
+      .replace(/\\n/g, '\n')
+      // 单独真实 CR -> LF
+      .replace(/\r/g, '\n')
+      // 字面量 "\\r" -> LF
+      .replace(/\\r/g, '\n');
   }
 
   /**
