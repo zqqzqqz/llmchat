@@ -41,8 +41,22 @@ export const useChat = () => {
     };
     addMessage(assistantMessage);
 
-    // 转换为后端通信格式
-    const chatMessages: OriginalChatMessage[] = convertFromHuihuaFormat([...messages, userMessage]);
+    // 读取用于 chatId 的会话 id（首条消息已创建会话时需要从最新状态获取）
+    let sessionIdForChat: string | undefined;
+    if (!currentSession) {
+      const { currentSession: latestSession } = useChatStore.getState();
+      sessionIdForChat = latestSession?.id;
+    } else {
+      sessionIdForChat = currentSession.id;
+    }
+
+    // 仅发送本次输入的消息，不打包历史消息
+    const chatMessages: OriginalChatMessage[] = convertFromHuihuaFormat([userMessage]);
+
+    // 透传 chatId 到后端（以会话 id 作为 chatId），保留其他 options
+    const mergedOptions: ChatOptions | undefined = sessionIdForChat
+      ? { ...options, chatId: sessionIdForChat }
+      : options;
     
     try {
       setIsStreaming(true);
@@ -58,14 +72,14 @@ export const useChat = () => {
           (status) => {
             setStreamingStatus(status);
           },
-          options
+          mergedOptions
         );
       } else {
         // 非流式响应
         const response = await chatService.sendMessage(
           currentAgent.id,
           chatMessages,
-          options
+          mergedOptions
         );
         
         const assistantContent = response.choices[0]?.message?.content || '';

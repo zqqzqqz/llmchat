@@ -38,7 +38,21 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
 }));
 
-app.use(compression());
+// 禁用对 SSE/流式接口的压缩，避免缓冲影响实时性
+app.use(compression({
+  filter: (req, res) => {
+    const accept = req.headers['accept'];
+    if (typeof accept === 'string' && accept.includes('text/event-stream')) {
+      return false; // 不压缩 SSE
+    }
+    // 显式禁用对流式聊天接口的压缩
+    if (req.path && req.path.startsWith('/api/chat/completions')) {
+      return false;
+    }
+    return compression.filter(req, res);
+  }
+}));
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 

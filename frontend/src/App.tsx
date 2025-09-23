@@ -1,4 +1,3 @@
-import React from 'react';
 import { ThemeProvider } from '@/components/theme/ThemeProvider';
 import { ChatApp } from '@/components/ChatApp';
 

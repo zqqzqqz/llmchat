@@ -2,6 +2,7 @@
   "agents": [
     {
       "id": "fastgpt-assistant",
+      "appId":"6708e788c6ba48baa62419a5",
       "name": "FastGPT 智能助手",
       "description": "基于 FastGPT 的知识库问答助手，支持自定义知识库和工作流",
       "endpoint": "http://171.43.138.237:3000/api/v1/chat/completions",
@@ -35,6 +36,7 @@
     },
     {
       "id": "gpt-4-assistant",
+      "appId":"6708e788c6ba48baa62419a5",
       "name": "GPT-4 助手",
       "description": "基于 GPT-4 的通用智能助手，擅长推理、编程和创意写作",
       "endpoint": "https://api.openai.com/v1/chat/completions",
@@ -68,6 +70,7 @@
     },
     {
       "id": "claude-assistant",
+      "appId":"6708e788c6ba48baa62419a5",
       "name": "Claude 助手",
       "description": "基于 Claude 的智能助手，擅长深度分析和推理",
       "endpoint": "https://api.anthropic.com/v1/messages",

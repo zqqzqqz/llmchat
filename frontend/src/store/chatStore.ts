@@ -153,16 +153,32 @@ export const useChatStore = create<ChatState>()(
           return { messages: updatedMessages };
         }),
 
-      // 更新最后一条消息（流式响应）
+      // 更新最后一条消息（流式响应）- 修复实时更新问题
       updateLastMessage: (content) =>
         set((state) => {
-          const messages = [...state.messages];
-          const lastMessage = messages[messages.length - 1];
-          
-          if (lastMessage && lastMessage.AI !== undefined) {
-            lastMessage.AI = (lastMessage.AI || '') + content;
-          }
-          
+          console.log('🔄 updateLastMessage 被调用:', content.substring(0, 50));
+          console.log('📊 当前消息数量:', state.messages.length);
+
+          // 创建全新的messages数组，确保引用更新
+          const messages = state.messages.map((msg, index) => {
+            if (index === state.messages.length - 1 && msg.AI !== undefined) {
+              const updatedMessage = {
+                ...msg,
+                AI: (msg.AI || '') + content,
+                _lastUpdate: Date.now() // 添加时间戳强制更新
+              };
+              console.log('📝 消息更新:', {
+                beforeLength: msg.AI?.length || 0,
+                afterLength: updatedMessage.AI.length,
+                addedContent: content.length
+              });
+              return updatedMessage;
+            }
+            return msg;
+          });
+
+          console.log('✅ 状态更新完成，最新消息长度:', messages[messages.length - 1]?.AI?.length || 0);
+
           // 同步更新当前会话的消息
           if (state.currentSession && state.currentAgent) {
             const updatedAgentSessions = {
@@ -173,7 +189,7 @@ export const useChatStore = create<ChatState>()(
                   : session
               )
             };
-            
+
             return {
               messages,
               agentSessions: updatedAgentSessions,
@@ -184,7 +200,7 @@ export const useChatStore = create<ChatState>()(
               }
             };
           }
-          
+
           return { messages };
         }),
 

@@ -76,6 +76,7 @@ export const chatService = {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Accept': 'text/event-stream',
       },
       body: JSON.stringify({
         agentId,
@@ -177,8 +178,12 @@ export const chatService = {
                   // FastGPT 官方答案事件
                   const answerContent = data.choices?.[0]?.delta?.content || data.content || '';
                   if (answerContent) {
-                    console.log('处理 answer 事件:', answerContent.substring(0, 50));
+                    console.log('✅ 处理 answer 事件:', answerContent.substring(0, 50));
+                    console.log('🔄 准备调用 onChunk 回调，内容长度:', answerContent.length);
                     onChunk(answerContent);
+                    console.log('✅ onChunk 回调调用完成');
+                  } else {
+                    console.log('⚠️ answer 事件但内容为空:', data);
                   }
                   break;
                   
@@ -191,6 +196,96 @@ export const chatService = {
               }
             } catch (parseError) {
               console.warn('解析 SSE 数据失败:', parseError, '原始数据:', dataStr);
+            }
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  },
+
+  // ===== 新增：初始化开场白（非流式） =====
+  async init(agentId: string, chatId?: string): Promise<any> {
+    const response = await api.get('/chat/init', {
+      params: {
+        appId: agentId,
+        ...(chatId ? { chatId } : {}),
+        stream: false,
+      },
+    });
+    return response.data.data;
+  },
+
+  // ===== 新增：初始化开场白（流式） =====
+  async initStream(
+    agentId: string,
+    chatId: string | undefined,
+    onChunk: (chunk: string) => void,
+    onComplete?: (data: any) => void
+  ): Promise<void> {
+    const search = new URLSearchParams({ appId: agentId, stream: 'true' });
+    if (chatId) search.set('chatId', chatId);
+
+    const response = await fetch(`/api/chat/init?${search.toString()}`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'text/event-stream',
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Init stream request failed:', response.status, errorText);
+      throw new Error(`Init stream request failed: ${response.status} ${errorText}`);
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error('No response body');
+    }
+
+    const decoder = new TextDecoder();
+    let currentEventType = '';
+    let buffer = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value);
+        buffer += chunk;
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.trim() === '') { currentEventType = ''; continue; }
+          if (line.startsWith('event: ')) { currentEventType = line.slice(7).trim(); continue; }
+          if (line.startsWith('data: ')) {
+            const dataStr = line.slice(6);
+            if (dataStr === '[DONE]') { return; }
+            try {
+              const data = JSON.parse(dataStr);
+              switch (currentEventType) {
+                case 'chunk':
+                  if (data.content) onChunk(data.content);
+                  break;
+                case 'answer': {
+                  const answerContent = data.choices?.[0]?.delta?.content || data.content || '';
+                  if (answerContent) onChunk(answerContent);
+                  break;
+                }
+                case 'complete':
+                  onComplete?.(data.data ?? data);
+                  break;
+                case 'status':
+                case 'flowNodeStatus':
+                default:
+                  // 开场白场景主要关心 chunk/complete，其他事件仅忽略
+                  break;
+              }
+            } catch (e) {
+              console.warn('解析 Init SSE 数据失败:', e, '原始数据:', dataStr);
             }
           }
         }

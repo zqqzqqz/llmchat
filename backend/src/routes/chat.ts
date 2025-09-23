@@ -8,6 +8,9 @@ const chatController = new ChatController();
 // POST /api/chat/completions
 router.post('/completions', chatController.chatCompletions);
 
+// 聊天初始化路由
+router.get('/init', chatController.chatInit);
+
 // 获取聊天历史
 // GET /api/chat/history/:sessionId
 router.get('/history/:sessionId', chatController.getChatHistory);

@@ -29,10 +29,11 @@ export class FastGPTProvider implements AIProvider {
   name = 'FastGPT';
 
   transformRequest(messages: ChatMessage[], config: AgentConfig, stream: boolean = false, options?: ChatOptions) {
+    const detail = options?.detail ?? config.features?.supportsDetail ?? false;
     const request: any = {
       chatId: options?.chatId || `chat_${Date.now()}`,
       stream: stream && config.features.streamingConfig.enabled,
-      detail: options?.detail || false,
+      detail,
       messages: messages.map(msg => ({
         role: msg.role,
         content: msg.content,
@@ -395,6 +396,7 @@ export class ChatProxyService {
           
           try {
             // 处理 FastGPT 官方 SSE 格式
+            console.log('line----------------:', line);
             if (line.startsWith('event: ')) {
               currentEventType = line.slice(7).trim();
               console.log('检测到事件类型:', currentEventType);
@@ -420,7 +422,7 @@ export class ChatProxyService {
               // 根据事件类型处理数据 - 特别针对 FastGPT
               if (config.provider === 'fastgpt' && config.features.streamingConfig.statusEvents) {
                 console.log('处理 FastGPT 事件:', { eventType: currentEventType, data });
-                
+
                 switch (currentEventType) {
                   case 'flowNodeStatus':
                     // FastGPT 流程节点状态事件
@@ -432,7 +434,7 @@ export class ChatProxyService {
                     console.log('发送流程节点状态:', statusEvent);
                     onStatusChange?.(statusEvent);
                     break;
-                  
+
                   case 'answer':
                     // FastGPT 答案内容事件
                     const answerContent = data.choices?.[0]?.delta?.content || data.content || '';
@@ -441,7 +443,7 @@ export class ChatProxyService {
                       onChunk(answerContent);
                     }
                     break;
-                  
+
                   case 'flowResponses':
                     // FastGPT 流程响应事件（详细执行信息）
                     console.log('流程响应事件:', data);
@@ -451,7 +453,7 @@ export class ChatProxyService {
                       moduleName: '执行完成',
                     });
                     break;
-                  
+
                   default:
                     // 处理标准流式响应（非特定事件）
                     const defaultContent = provider.transformStreamResponse(data);

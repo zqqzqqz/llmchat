@@ -1,13 +1,85 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { MessageList } from './MessageList';
 import { MessageInput } from './MessageInput';
 import { useChatStore } from '@/store/chatStore';
 import { useChat } from '@/hooks/useChat';
 import { Bot, Sparkles } from 'lucide-react';
+import { chatService } from '@/services/api';
 
 export const ChatContainer: React.FC = () => {
-  const { messages, currentAgent, isStreaming, currentSession } = useChatStore();
+  const {
+    messages,
+    currentAgent,
+    isStreaming,
+    preferences,
+    currentSession,
+    addMessage,
+    updateLastMessage,
+    setIsStreaming,
+    createNewSession,
+  } = useChatStore();
   const { sendMessage } = useChat();
+
+  // 避免重复触发同一会话/智能体的开场白
+  const welcomeTriggeredKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    // 仅在有智能体、当前没有消息、且不在流式中时触发
+    if (!currentAgent) return;
+    if (isStreaming) return;
+    if (messages.length > 0) return;
+
+    let sessionId = currentSession?.id;
+
+    const run = async () => {
+      // 确保存在会话（新建对话场景）
+      if (!sessionId) {
+        createNewSession();
+        const latest = useChatStore.getState().currentSession;
+        sessionId = latest?.id;
+      }
+
+      const key = `${currentAgent.id}:${sessionId || 'nosession'}`;
+      if (welcomeTriggeredKeyRef.current === key) return;
+      welcomeTriggeredKeyRef.current = key;
+
+      // 添加AI消息占位符，流式增量写入
+      addMessage({ AI: '' });
+      setIsStreaming(true);
+
+      try {
+        if (preferences.streamingEnabled) {
+          await chatService.initStream(
+            currentAgent.id,
+            sessionId,
+            (chunk) => {
+              updateLastMessage(chunk);
+            },
+            () => {
+              // 非必需，可在完成时做额外处理
+            }
+          );
+        } else {
+          const data = await chatService.init(currentAgent.id, sessionId);
+          const content =
+            data?.welcomeText ||
+            data?.app?.chatConfig?.welcomeText ||
+            data?.content ||
+            `你好，我是 ${currentAgent.name}${currentAgent.description ? '：' + currentAgent.description : ''}`;
+          updateLastMessage(content);
+        }
+      } catch (e) {
+        console.error('开场白加载失败:', e);
+        const fallback = `你好，我是 ${currentAgent.name}${currentAgent.description ? '：' + currentAgent.description : ''}`;
+        updateLastMessage(fallback);
+      } finally {
+        setIsStreaming(false);
+      }
+    };
+
+    run();
+    // 仅在智能体/会话变更或消息长度变化时检查
+  }, [currentAgent?.id, currentSession?.id, messages.length, isStreaming, preferences.streamingEnabled, createNewSession, addMessage, updateLastMessage, setIsStreaming]);
 
   // 无智能体时的提示界面
   if (!currentAgent) {
@@ -29,7 +101,7 @@ export const ChatContainer: React.FC = () => {
     );
   }
 
-  // 无消息时的欢迎界面
+  // 无消息时的欢迎界面（在副作用触发期间短暂显示）
   if (messages.length === 0) {
     return (
       <div className="flex-1 flex flex-col">

@@ -166,7 +166,7 @@ curl --location --request POST 'http://localhost:3000/api/v1/chat/completions' \
 ### 流式响应 (detail=false, stream=true)
 
 ```
-data: {"id":"","object":"","created":0,"choices":[{"delta":{"content":""},"index":0,"finish_reason":null}]}
+data: {"id":"","object":"","created":0,"choices":[{"dta":{"content":""},"index":0,"finish_reason":null}]}
 
 data: {"id":"","object":"","created":0,"choices":[{"delta":{"content":"电"},"index":0,"finish_reason":null}]}
 

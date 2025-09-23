@@ -39,7 +39,7 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({
 
   // 初始化主题
   useEffect(() => {
-    updateTheme(userPreference);
+    updateTheme(defaultTheme);
     setupAutoUpdate();
     
     return () => {
@@ -47,12 +47,14 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({
         clearInterval(autoUpdateInterval);
       }
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // 监听用户偏好变化
   useEffect(() => {
     updateTheme(userPreference);
     setupAutoUpdate();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userPreference]);
 
   // 设置自动更新定时器
@@ -119,60 +121,16 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({
     });
   };
 
-  // 应用主题到DOM
+  // 应用主题到文档
   useEffect(() => {
-    const root = document.documentElement;
-    
-    // 移除所有主题类
+    const root = window.document.documentElement;
     root.classList.remove('light', 'dark');
-    
-    // 添加当前主题类
     root.classList.add(theme);
-    
-    // 设置data属性（兼容某些UI库）
-    root.setAttribute('data-theme', theme);
-    
-    // 更新meta标签（移动端状态栏）
-    const metaThemeColor = document.querySelector('meta[name="theme-color"]');
-    if (metaThemeColor) {
-      metaThemeColor.setAttribute('content', theme === 'dark' ? '#111827' : '#ffffff');
-    } else {
-      // 如果不存在，创建一个
-      const meta = document.createElement('meta');
-      meta.name = 'theme-color';
-      meta.content = theme === 'dark' ? '#111827' : '#ffffff';
-      document.head.appendChild(meta);
-    }
   }, [theme]);
 
-  // 监听系统主题变化（当用户在操作系统中切换主题时）
-  useEffect(() => {
-    if (userPreference === 'auto') {
-      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-      const handleChange = () => {
-        if (userPreference === 'auto') {
-          updateTheme('auto');
-        }
-      };
-      
-      mediaQuery.addEventListener('change', handleChange);
-      return () => mediaQuery.removeEventListener('change', handleChange);
-    }
-  }, [userPreference]);
-
   return (
-    <ThemeContext.Provider value={{ 
-      theme, 
-      userPreference, 
-      toggleTheme, 
-      setTheme, 
-      isAutoMode 
-    }}>
-      <div className={`min-h-screen transition-colors duration-300 ${
-        theme === 'dark' ? 'dark' : ''
-      }`}>
-        {children}
-      </div>
+    <ThemeContext.Provider value={{ theme, userPreference, toggleTheme, setTheme, isAutoMode }}>
+      {children}
     </ThemeContext.Provider>
   );
 };

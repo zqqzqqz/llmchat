@@ -1,0 +1,14 @@
+export declare const generateId: () => string;
+export declare const generateTimestamp: () => number;
+export declare const isValidUrl: (url: string) => boolean;
+export declare const safeJsonParse: <T>(jsonString: string, defaultValue: T) => T;
+export declare const delay: (ms: number) => Promise<void>;
+export declare const getErrorMessage: (error: unknown) => string;
+export declare const cleanObject: <T extends Record<string, any>>(obj: T) => Partial<T>;
+export declare const deepClone: <T>(obj: T) => T;
+export declare const isEmpty: (obj: any) => boolean;
+export declare const formatFileSize: (bytes: number) => string;
+export declare const truncateString: (str: string, maxLength: number) => string;
+export declare const toCamelCase: (str: string) => string;
+export declare const toSnakeCase: (str: string) => string;
+//# sourceMappingURL=helpers.d.ts.map

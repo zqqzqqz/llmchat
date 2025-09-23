@@ -154,6 +154,14 @@ export class AgentConfigService {
       return false;
     }
 
+    // 针对 FastGPT 提供商，要求存在 appId 且为 24 位 hex
+    if (config.provider === 'fastgpt') {
+      if (!config.appId || typeof config.appId !== 'string' || !/^[a-fA-F0-9]{24}$/.test(config.appId)) {
+        console.error(`FastGPT 配置缺少有效的 appId（需要 24 位十六进制字符串）: ${config.id}`);
+        return false;
+      }
+    }
+
     // 检查provider是否合法
     const validProviders = ['fastgpt', 'openai', 'anthropic', 'custom'];
     if (!validProviders.includes(config.provider)) {

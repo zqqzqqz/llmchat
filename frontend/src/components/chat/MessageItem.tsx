@@ -5,7 +5,7 @@ import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
 import rehypeHighlight from 'rehype-highlight';
 import rehypeRaw from 'rehype-raw';
-import { ChatMessage } from '@/types';
+import { ChatMessage, Agent, StreamStatus } from '@/types';
 import 'highlight.js/styles/github-dark.css';
 
 interface MessageItemProps {
@@ -14,6 +14,8 @@ interface MessageItemProps {
   onRetry?: () => void;
   onEdit?: (content: string) => void;
   onDelete?: () => void;
+  currentAgent?: Agent;
+  streamingStatus?: StreamStatus;
 }
 
 export const MessageItem: React.FC<MessageItemProps> = ({ 
@@ -21,7 +23,9 @@ export const MessageItem: React.FC<MessageItemProps> = ({
   isStreaming = false,
   onRetry,
   onEdit,
-  onDelete
+  onDelete,
+  currentAgent,
+  streamingStatus
 }) => {
   const [copied, setCopied] = useState(false);
   const [liked, setLiked] = useState<boolean | null>(null);
@@ -86,7 +90,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({
               rehypePlugins={[rehypeHighlight, rehypeRaw]}
               components={{
                 code: ({ className, children, ...props }: any) => {
-                  const match = /language-(\w+)/.exec(className || '');
+                  const match = /language-(\\w+)/.exec(className || '');
                   const isBlock = match && className;
                   
                   if (isBlock) {
@@ -120,12 +124,39 @@ export const MessageItem: React.FC<MessageItemProps> = ({
               {content}
             </ReactMarkdown>
             
-            {/* 流式指示器 */}
-            {isStreaming && (
-              <div className="flex items-center mt-2">
-                <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
-                <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse ml-1" style={{ animationDelay: '0.2s' }}></div>
-                <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse ml-1" style={{ animationDelay: '0.4s' }}></div>
+            {/* 在气泡内部渲染 FastGPT 状态面板（替代原三点动画） */}
+            {isStreaming && currentAgent?.provider === 'fastgpt' && (
+              <div className="flex justify-start mt-2">
+                <div className="flex items-center space-x-2 px-4 py-2 rounded-lg shadow-sm border border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
+                  {/* 简单的“流程节点”图标 */}
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                    <circle cx="6" cy="12" r="2"></circle>
+                    <circle cx="12" cy="6" r="2"></circle>
+                    <circle cx="18" cy="12" r="2"></circle>
+                    <path d="M8 12h4M14 10l2-2M14 12h2"></path>
+                  </svg>
+                  {/* 三点动画 */}
+                  <div className="flex space-x-1">
+                    <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                    <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }}></div>
+                    <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }}></div>
+                  </div>
+                  <span className="text-sm"></span>
+                  {streamingStatus?.type === 'flowNodeStatus' && (
+                    <>
+                      <span className="text-sm font-medium">{streamingStatus.moduleName || '未知模块'}</span>
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ml-1 ${
+                        streamingStatus.status === 'error'
+                          ? 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+                          : (streamingStatus.status === 'completed'
+                              ? 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+                              : 'bg-yellow-50 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300')
+                      }`}>
+                        {streamingStatus.status || 'running'}
+                      </span>
+                    </>
+                  )}
+                </div>
               </div>
             )}
           </div>

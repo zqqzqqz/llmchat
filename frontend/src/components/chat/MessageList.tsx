@@ -1,7 +1,8 @@
-import React, { useEffect, useRef, memo, useState } from 'react';
-import { ChatMessage, Agent, StreamStatus } from '@/types';
+import React, { useEffect, useRef, memo } from 'react';
+import { ChatMessage } from '@/types';
 import { MessageItem } from './MessageItem';
-import { FastGPTStatusIndicator } from './FastGPTStatusIndicator';
+// 已移除 FastGPTStatusIndicator 导入，方案A最小化：仅去掉该UI块
+// import { FastGPTStatusIndicator } from './FastGPTStatusIndicator';
 import { useChatStore } from '@/store/chatStore';
 
 interface MessageListProps {
@@ -16,30 +17,6 @@ export const MessageList: React.FC<MessageListProps> = memo(({
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastMessageRef = useRef<HTMLDivElement>(null);
   const { currentAgent, streamingStatus } = useChatStore();
-  const [moduleHistory, setModuleHistory] = useState<StreamStatus[]>([]);
-
-  // 追踪 FastGPT 流程节点历史
-  useEffect(() => {
-    if (streamingStatus && streamingStatus.type === 'flowNodeStatus') {
-      setModuleHistory(prev => {
-        // 避免重复添加相同模块
-        const exists = prev.some(item => 
-          item.moduleName === streamingStatus.moduleName && 
-          item.status === streamingStatus.status
-        );
-        
-        if (!exists) {
-          return [...prev, streamingStatus];
-        }
-        return prev;
-      });
-    }
-    
-    // 清空历史（当不是流式传输时）
-    if (!isStreaming && !streamingStatus) {
-      setModuleHistory([]);
-    }
-  }, [streamingStatus, isStreaming]);
 
   // 自动滚动到底部
   useEffect(() => {
@@ -65,6 +42,8 @@ export const MessageList: React.FC<MessageListProps> = memo(({
                 <MessageItem 
                   message={message}
                   isStreaming={isStreaming && isLastMessage && isAssistantMessage}
+                  currentAgent={currentAgent ?? undefined}
+                  streamingStatus={streamingStatus ?? undefined}
                 />
                 {/* 最后一个消息的占位元素 */}
                 {isLastMessage && (
@@ -74,18 +53,7 @@ export const MessageList: React.FC<MessageListProps> = memo(({
             );
           })}
           
-          {/* FastGPT 特有状态显示 - 始终显示当选择 FastGPT 智能体时 */}
-          {currentAgent && currentAgent.provider === 'fastgpt' && (
-            <div className="fastgpt-status-wrapper">
-              <FastGPTStatusIndicator
-                isStreaming={isStreaming}
-                currentStatus={streamingStatus || undefined}
-                agent={currentAgent}
-                moduleHistory={moduleHistory}
-              />
-            </div>
-          )}
-          
+          {/* FastGPT 特有状态显示 - 已迁移到气泡内部，移除此处渲染 */}
           {/* 标准流式传输指示器（非 FastGPT） */}
           {isStreaming && (!currentAgent || currentAgent.provider !== 'fastgpt') && (
             <div className="flex justify-start">
@@ -96,6 +64,14 @@ export const MessageList: React.FC<MessageListProps> = memo(({
                   <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }}></div>
                 </div>
                 <span className="text-sm text-gray-500 dark:text-gray-400">正在生成回答...</span>
+                {/* 在三点动画后展示 flowNodeStatus 数据（若存在） */}
+                
+                {streamingStatus?.type === 'flowNodeStatus' && (
+                  <span className="text-xs text-gray-400 dark:text-gray-500 ml-3">
+                    {streamingStatus.moduleName || '未知模块'} - {streamingStatus.status || 'running'}
+                  </span>
+                )}
+                
               </div>
             </div>
           )}
