@@ -56,11 +56,24 @@ export class ChatController {
       'any.required': '消息列表不能为空',
     }),
     stream: Joi.boolean().optional().default(false),
+    // 兼容顶层直传（标准FastGPT格式）
+    chatId: Joi.string().optional(),
+    detail: Joi.boolean().optional(),
+    temperature: Joi.number().min(0).max(2).optional(),
+    maxTokens: Joi.number().min(1).max(32768).optional(),
+    variables: Joi.object().optional(),
+    responseChatItemId: Joi.string().optional(),
+    retainDatasetCite: Joi.boolean().optional(),
+    appId: Joi.string().optional(),
+    // 兼容原有 options 格式
     options: Joi.object({
       chatId: Joi.string().optional(),
       detail: Joi.boolean().optional(),
       temperature: Joi.number().min(0).max(2).optional(),
       maxTokens: Joi.number().min(1).max(32768).optional(),
+      // 允许旧用法把 variables 放到 options 里
+      variables: Joi.object().optional(),
+      responseChatItemId: Joi.string().optional(),
     }).optional(),
   });
 
@@ -82,7 +95,24 @@ export class ChatController {
         return;
       }
 
-      const { agentId, messages, stream, options } = value;
+      const { agentId, messages, stream } = value as any;
+      // 统一兼容：顶层与 options 的混用，归一化为 ChatOptions
+      const normalizedOptions: ChatOptions = {
+        ...(value.options || {}),
+        ...(value.chatId ? { chatId: value.chatId } : {}),
+        ...(typeof value.detail === 'boolean' ? { detail: value.detail } : {}),
+        ...(typeof value.temperature === 'number' ? { temperature: value.temperature } : {}),
+        ...(typeof value.maxTokens === 'number' ? { maxTokens: value.maxTokens } : {}),
+        ...(value.variables ? { variables: value.variables } : {}),
+        ...(value.responseChatItemId ? { responseChatItemId: value.responseChatItemId } : {}),
+      };
+
+      console.log('🧪 [chatCompletions] 入参(归一化): ', {
+        agentId,
+        stream,
+        options: normalizedOptions,
+        messagesCount: Array.isArray(messages) ? messages.length : 0,
+      });
 
       // 检查智能体是否存在
       const agent = await this.agentService.getAgent(agentId);
@@ -108,9 +138,9 @@ export class ChatController {
 
       // 处理流式请求
       if (stream) {
-        await this.handleStreamRequest(res, agentId, messages, options);
+        await this.handleStreamRequest(res, agentId, messages, normalizedOptions);
       } else {
-        await this.handleNormalRequest(res, agentId, messages, options);
+        await this.handleNormalRequest(res, agentId, messages, normalizedOptions);
       }
     } catch (error) {
       console.error('聊天请求处理失败:', error);
@@ -215,7 +245,21 @@ export class ChatController {
             res.end();
           }
         },
-        options
+        options,
+        // 事件透传回调：关注 FastGPT 的 interactive 以及 chatId 事件
+        (eventName: string, data: any) => {
+          if (eventName === 'interactive') {
+            console.log('🧩 收到交互节点事件 interactive，payload 预览:',
+              (() => { try { return JSON.stringify(data).slice(0, 300); } catch { return '[Unserializable payload]'; } })()
+            );
+            this.sendSSEEvent(res, 'interactive', data);
+          } else if (eventName === 'chatId') {
+            console.log('🆔 透传本次使用的 chatId:', (data && (data.chatId || data.id)) || data);
+            this.sendSSEEvent(res, 'chatId', data);
+          } else {
+            console.log('📎 收到未分类透传事件:', eventName);
+          }
+        }
       );
     } catch (error) {
       console.error('❌ 流式聊天请求失败:', error);
@@ -254,7 +298,7 @@ export class ChatController {
       if (error) {
         const apiError: ApiError = {
           code: 'VALIDATION_ERROR',
-          message: error.details[0].message,
+          message: error?.details?.[0]?.message || (error as any)?.message || '请求参数校验失败',
           timestamp: new Date().toISOString(),
         };
         res.status(400).json(apiError);
@@ -365,6 +409,7 @@ export class ChatController {
       typeof (res as any).flushHeaders === 'function' && (res as any).flushHeaders();
 
       console.log('🚀 开始处理流式初始化请求，应用:', appId);
+      console.log('ℹ️ 初始化流仅包含 start/chunk/complete/end 事件，不包含 interactive 事件');
 
       // 发送初始化事件
       this.sendSSEEvent(res, 'start', {

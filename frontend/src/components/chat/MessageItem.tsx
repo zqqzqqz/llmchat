@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { User, Bot, Copy, Check, RotateCcw, ThumbsUp, ThumbsDown } from 'lucide-react';
+import { User, Copy, Check, RotateCcw, ThumbsUp, ThumbsDown } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -7,6 +7,8 @@ import rehypeHighlight from 'rehype-highlight';
 import rehypeRaw from 'rehype-raw';
 import { ChatMessage, Agent, StreamStatus } from '@/types';
 import 'highlight.js/styles/github-dark.css';
+
+import avatarImg from '@/img/4.png';
 
 interface MessageItemProps {
   message: ChatMessage;
@@ -16,23 +18,155 @@ interface MessageItemProps {
   onDelete?: () => void;
   currentAgent?: Agent;
   streamingStatus?: StreamStatus;
+  // 为了兼容 init 交互，放宽参数类型
+  onInteractiveSelect?: (value: any) => void;
+  onInteractiveFormSubmit?: (values: any) => void;
 }
 
-export const MessageItem: React.FC<MessageItemProps> = ({ 
-  message, 
+export const MessageItem: React.FC<MessageItemProps> = ({
+  message,
   isStreaming = false,
   onRetry,
-  onEdit,
-  onDelete,
+  onEdit: _onEdit,
+  onDelete: _onDelete,
   currentAgent,
-  streamingStatus
+  streamingStatus,
+  onInteractiveSelect,
+  onInteractiveFormSubmit
 }) => {
   const [copied, setCopied] = useState(false);
+  // 交互节点专用渲染（优先于普通 HUMAN/AI 文本）
+  if (message.interactive) {
+    const data = message.interactive;
+
+    // userInput 表单的本地状态
+    const [formValues, setFormValues] = useState<Record<string, any>>({});
+
+    // userSelect 下拉选择的本地状态
+    const [selectedValue, setSelectedValue] = useState<string>(() => {
+      const opts = (data.params as any)?.userSelectOptions || [];
+      return (opts[0]?.key ?? opts[0]?.value ?? '') as string;
+    });
+
+
+    const renderUserSelect = () => (
+      <div className="flex justify-start">
+        <div className="flex items-start gap-3 max-w-[80%] w-full">
+          <img src={avatarImg} alt="AI" className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+          <div className="bg-white dark:bg-gray-800 rounded-2xl px-4 py-3 shadow-sm border border-gray-200 dark:border-gray-700 flex-1">
+            <div className="text-sm text-gray-700 dark:text-gray-200 mb-3 whitespace-pre-wrap">
+              {data.params?.description || '请选择一个选项以继续'}
+            </div>
+            <div className="flex items-center gap-2">
+              <select
+                className="flex-1 px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                value={selectedValue}
+                onChange={(e) => setSelectedValue(e.target.value)}
+              >
+                {(data.params as any)?.userSelectOptions?.map((opt: any, idx: number) => (
+                  <option key={idx} value={String(opt.key ?? opt.value)}>
+                    {String(opt.value ?? opt.key)}
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={() => { if ((data as any).origin === 'init') { const varKey = (data.params as any)?.varKey; onInteractiveSelect?.({ origin: 'init', key: varKey, value: selectedValue }); } else { onInteractiveSelect?.(selectedValue); } }}
+                className="px-3 py-1.5 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+              >
+
+
+
+
+
+
+
+
+
+
+
+                {(data as any).origin === 'init' ? '开始对话' : '确定'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+
+    const renderUserInput = () => (
+      <div className="flex justify-start">
+        <div className="flex items-start gap-3 max-w-[80%] w-full">
+          <img src={avatarImg} alt="AI" className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+          <div className="bg-white dark:bg-gray-800 rounded-2xl px-4 py-3 shadow-sm border border-gray-200 dark:border-gray-700 flex-1">
+            <div className="text-sm text-gray-700 dark:text-gray-200 mb-3 whitespace-pre-wrap">
+              {data.params?.description || '请填写表单以继续'}
+            </div>
+            <form
+              className="space-y-3"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if ((data as any).origin === 'init') {
+                  onInteractiveFormSubmit?.({ origin: 'init', values: formValues });
+                } else {
+                  onInteractiveFormSubmit?.(formValues);
+                }
+              }}
+            >
+              {(data.params as any)?.inputForm?.map((item: any, idx: number) => {
+                const key = item?.key || `field_${idx}`;
+                const label = item?.label || key;
+                const type = item?.type || 'input';
+                return (
+                  <div key={idx} className="flex items-center gap-3">
+                    <label className="w-28 text-sm text-gray-600 dark:text-gray-300">{label}</label>
+                    {type === 'numberInput' ? (
+                      <input
+                        type="number"
+                        className="flex-1 px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                        onChange={(e) => setFormValues((s) => ({ ...s, [key]: Number(e.target.value) }))}
+                      />
+                    ) : type === 'select' ? (
+                      <select
+                        className="flex-1 px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                        onChange={(e) => setFormValues((s) => ({ ...s, [key]: e.target.value }))}
+                      >
+                        {(item.list || []).map((opt: any, i: number) => (
+                          <option key={i} value={String(opt.value)}>
+                            {String(opt.label ?? opt.value)}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        className="flex-1 px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                        onChange={(e) => setFormValues((s) => ({ ...s, [key]: e.target.value }))}
+                      />
+                    )}
+                  </div>
+                );
+              })}
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+                >
+                  {(data as any).origin === 'init' ? '开始对话' : '提交'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    );
+
+    if (data.type === 'userSelect') return renderUserSelect();
+    if (data.type === 'userInput') return renderUserInput();
+  }
+
   const [liked, setLiked] = useState<boolean | null>(null);
-  
+
   // huihua.md 格式：检查是用户消息还是 AI 消息
   const isUser = message.HUMAN !== undefined;
-  const isAssistant = message.AI !== undefined;
   const content = isUser ? message.HUMAN : message.AI;
 
   const handleCopy = async () => {
@@ -77,11 +211,8 @@ export const MessageItem: React.FC<MessageItemProps> = ({
   return (
     <div className="flex justify-start">
       <div className="flex items-start gap-3 max-w-[80%] w-full">
-        <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full 
-          flex items-center justify-center flex-shrink-0">
-          <Bot className="h-4 w-4 text-white" />
-        </div>
-        
+        <img src={avatarImg} alt="AI" className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+
         <div className="bg-white dark:bg-gray-800 rounded-2xl px-4 py-3 shadow-sm border border-gray-200 dark:border-gray-700 flex-1">
           {/* 消息内容 */}
           <div className="prose prose-sm max-w-none dark:prose-invert">
@@ -92,7 +223,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({
                 code: ({ className, children, ...props }: any) => {
                   const match = /language-(\\w+)/.exec(className || '');
                   const isBlock = match && className;
-                  
+
                   if (isBlock) {
                     return (
                       <div className="relative group">
@@ -112,7 +243,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({
                       </div>
                     );
                   }
-                  
+
                   return (
                     <code className="bg-gray-100 dark:bg-gray-700 px-1 py-0.5 rounded text-sm" {...props}>
                       {children}
@@ -123,7 +254,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({
             >
               {content}
             </ReactMarkdown>
-            
+
             {/* 在气泡内部渲染 FastGPT 状态面板（替代原三点动画） */}
             {isStreaming && currentAgent?.provider === 'fastgpt' && (
               <div className="flex justify-start mt-2">
@@ -160,13 +291,13 @@ export const MessageItem: React.FC<MessageItemProps> = ({
               </div>
             )}
           </div>
-          
+
           {/* 消息元数据 */}
           <div className="flex items-center justify-between mt-3 pt-2 border-t border-gray-100 dark:border-gray-700">
             <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
               <span>{formatTime()}</span>
             </div>
-            
+
             {/* 操作按钮 */}
             <div className="flex items-center gap-2">
               <button
@@ -176,7 +307,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({
               >
                 {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
               </button>
-              
+
               {onRetry && (
                 <button
                   onClick={onRetry}
@@ -186,24 +317,24 @@ export const MessageItem: React.FC<MessageItemProps> = ({
                   <RotateCcw className="h-4 w-4" />
                 </button>
               )}
-              
+
               <button
                 onClick={() => setLiked(liked === true ? null : true)}
                 className={`p-1 transition-colors ${
-                  liked === true 
-                    ? 'text-green-500' 
+                  liked === true
+                    ? 'text-green-500'
                     : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
                 }`}
                 title="点赞"
               >
                 <ThumbsUp className="h-4 w-4" />
               </button>
-              
+
               <button
                 onClick={() => setLiked(liked === false ? null : false)}
                 className={`p-1 transition-colors ${
-                  liked === false 
-                    ? 'text-red-500' 
+                  liked === false
+                    ? 'text-red-500'
                     : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
                 }`}
                 title="点踩"

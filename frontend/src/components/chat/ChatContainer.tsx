@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { MessageList } from './MessageList';
 import { MessageInput } from './MessageInput';
 import { useChatStore } from '@/store/chatStore';
@@ -18,10 +18,105 @@ export const ChatContainer: React.FC = () => {
     setIsStreaming,
     createNewSession,
   } = useChatStore();
-  const { sendMessage } = useChat();
+  const { sendMessage, continueInteractiveSelect, continueInteractiveForm } = useChat();
 
   // 避免重复触发同一会话/智能体的开场白
   const welcomeTriggeredKeyRef = useRef<string | null>(null);
+
+  // init 变量流程：隐藏输入框、收集初始变量
+  const [hideComposer, setHideComposer] = useState(false);
+  const [pendingInitVars, setPendingInitVars] = useState<Record<string, any> | null>(null);
+
+  // 将 FastGPT init 返回的 variables 转为交互气泡
+  const renderVariablesAsInteractive = (initData: any) => {
+    try {
+      const vars = initData?.app?.chatConfig?.variables || [];
+      if (!Array.isArray(vars) || vars.length === 0) return;
+
+      // 仅 1 个且为 select -> 下拉选择气泡（userSelect）
+      if (vars.length === 1 && vars[0]?.type === 'select' && Array.isArray(vars[0]?.list)) {
+        const v = vars[0];
+        const interactive = {
+          type: 'userSelect' as const,
+          origin: 'init' as const,
+          params: {
+            varKey: v.key,
+            description: v.description || v.label || '请选择一个选项以继续',
+            userSelectOptions: (v.list || []).map((opt: any) => ({
+              key: String(opt.value),              // 发送值
+              value: String(opt.label ?? opt.value) // 显示文本
+            }))
+          }
+        };
+        addMessage({ interactive });
+        setHideComposer(true);
+        return;
+      }
+
+      // 多变量或非 select 类型 -> 合并为一个表单（userInput）
+      const inputForm = vars.map((v: any, idx: number) => {
+        const t = v.type;
+        const mappedType = t === 'number' || t === 'numberInput' ? 'numberInput' : (t === 'select' ? 'select' : 'input');
+        return {
+          type: mappedType,
+          key: v.key || `field_${idx}`,
+          label: v.label || v.key || `字段${idx + 1}`,
+          description: v.description || '',
+          value: v.defaultValue ?? '',
+          defaultValue: v.defaultValue ?? '',
+          valueType: v.valueType || (mappedType === 'numberInput' ? 'number' : 'string'),
+          required: !!v.required,
+          list: Array.isArray(v.list) ? v.list : []
+        };
+      });
+
+      const interactive = {
+        type: 'userInput' as const,
+        origin: 'init' as const,
+        params: {
+          description: '请填写以下信息以继续',
+          inputForm
+        }
+      };
+      addMessage({ interactive });
+      setHideComposer(true);
+    } catch (e) {
+      console.warn('渲染 variables 失败:', e);
+    }
+  };
+
+  // 交互回调：区分 init 起源与普通交互
+  const handleInteractiveSelect = (payload: any) => {
+    if (typeof payload === 'string') {
+      // 普通交互（非 init）：直接继续运行
+      return continueInteractiveSelect(payload);
+    }
+    if (payload && payload.origin === 'init') {
+      // init 交互：仅收集变量，显示输入框，不请求后端
+      setPendingInitVars((prev) => ({ ...(prev || {}), [payload.key]: payload.value }));
+      setHideComposer(false);
+    }
+  };
+
+  const handleInteractiveFormSubmit = (payload: any) => {
+    // 非 init 表单：直接继续运行
+    if (!payload || payload.origin !== 'init') {
+      return continueInteractiveForm(payload);
+    }
+    // init 表单：仅收集变量，显示输入框
+    const values = payload.values || {};
+    setPendingInitVars((prev) => ({ ...(prev || {}), ...values }));
+    setHideComposer(false);
+  };
+
+  // 发送消息：若存在 init 变量，则在首次发送时一并携带
+  const handleSendMessage = async (content: string) => {
+    const vars = pendingInitVars || undefined;
+    const options = vars ? { variables: vars, detail: true } : { detail: true };
+    await sendMessage(content, options);
+    if (vars) setPendingInitVars(null);
+  };
+
 
   useEffect(() => {
     // 仅在有智能体、当前没有消息、且不在流式中时触发
@@ -55,8 +150,9 @@ export const ChatContainer: React.FC = () => {
             (chunk) => {
               updateLastMessage(chunk);
             },
-            () => {
-              // 非必需，可在完成时做额外处理
+            (initData) => {
+              // 流式开场白完成后，根据 variables 渲染交互气泡
+              renderVariablesAsInteractive(initData);
             }
           );
         } else {
@@ -67,6 +163,9 @@ export const ChatContainer: React.FC = () => {
             data?.content ||
             `你好，我是 ${currentAgent.name}${currentAgent.description ? '：' + currentAgent.description : ''}`;
           updateLastMessage(content);
+          // 非流式初始化后渲染 variables 为交互气泡
+          renderVariablesAsInteractive(data);
+
         }
       } catch (e) {
         console.error('开场白加载失败:', e);
@@ -86,7 +185,7 @@ export const ChatContainer: React.FC = () => {
     return (
       <div className="flex-1 flex items-center justify-center p-8">
         <div className="text-center max-w-md">
-          <div className="w-16 h-16 mx-auto mb-6 bg-gradient-to-r from-blue-500 to-purple-600 rounded-2xl 
+          <div className="w-16 h-16 mx-auto mb-6 bg-gradient-to-r from-blue-500 to-purple-600 rounded-2xl
             flex items-center justify-center">
             <Bot className="h-8 w-8 text-white" />
           </div>
@@ -107,7 +206,7 @@ export const ChatContainer: React.FC = () => {
       <div className="flex-1 flex flex-col">
         <div className="flex-1 flex items-center justify-center p-8">
           <div className="text-center max-w-2xl">
-            <div className="w-20 h-20 mx-auto mb-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-3xl 
+            <div className="w-20 h-20 mx-auto mb-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-3xl
               flex items-center justify-center shadow-lg">
               <Sparkles className="h-10 w-10 text-white" />
             </div>
@@ -117,10 +216,10 @@ export const ChatContainer: React.FC = () => {
             <p className="text-lg text-gray-600 dark:text-gray-400 mb-8">
               {currentAgent.description}
             </p>
-            
+
             {/* 示例提示 */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-              <div className="p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 
+              <div className="p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700
                 hover:border-blue-300 dark:hover:border-blue-600 transition-colors cursor-pointer"
                 onClick={() => sendMessage('你好，请介绍一下你的能力')}
               >
@@ -131,8 +230,8 @@ export const ChatContainer: React.FC = () => {
                   了解智能体的功能与特点
                 </p>
               </div>
-              
-              <div className="p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 
+
+              <div className="p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700
                 hover:border-blue-300 dark:hover:border-blue-600 transition-colors cursor-pointer"
                 onClick={() => sendMessage('你能帮我做什么？')}
               >
@@ -146,15 +245,17 @@ export const ChatContainer: React.FC = () => {
             </div>
           </div>
         </div>
-        
+
         {/* 输入区域 */}
         <div className="border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-4">
           <div className="max-w-4xl mx-auto">
-            <MessageInput
-              onSendMessage={sendMessage}
-              disabled={isStreaming}
-              placeholder={`与 ${currentAgent.name} 对话...`}
-            />
+            {!hideComposer && (
+              <MessageInput
+                onSendMessage={handleSendMessage}
+                disabled={isStreaming}
+                placeholder={`与 ${currentAgent.name} 对话...`}
+              />
+            )}
           </div>
         </div>
       </div>
@@ -165,15 +266,22 @@ export const ChatContainer: React.FC = () => {
   return (
     <div className="flex flex-col h-full bg-white dark:bg-gray-900">
       <div className="flex-1 overflow-hidden">
-        <MessageList messages={messages} isStreaming={isStreaming} />
+        <MessageList
+            messages={messages}
+            isStreaming={isStreaming}
+            onInteractiveSelect={handleInteractiveSelect}
+            onInteractiveFormSubmit={handleInteractiveFormSubmit}
+          />
       </div>
       <div className="border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-4">
         <div className="max-w-4xl mx-auto">
-          <MessageInput
-            onSendMessage={sendMessage}
-            disabled={isStreaming}
-            placeholder={`与 ${currentAgent.name} 对话...`}
-          />
+          {!hideComposer && (
+            <MessageInput
+              onSendMessage={handleSendMessage}
+              disabled={isStreaming}
+              placeholder={`与 ${currentAgent.name} 对话...`}
+            />
+          )}
         </div>
       </div>
     </div>

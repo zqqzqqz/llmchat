@@ -5,6 +5,7 @@ export interface AgentConfig {
     endpoint: string;
     apiKey: string;
     model: string;
+    appId?: string;
     maxTokens?: number;
     temperature?: number;
     systemPrompt?: string;
@@ -114,6 +115,43 @@ export interface ChatSession {
     metadata?: {
         totalTokens: number;
         messageCount: number;
+    };
+}
+export interface FastGPTInitResponse {
+    chatId: string;
+    appId: string;
+    variables: Record<string, any>;
+    app: {
+        chatConfig: {
+            questionGuide: boolean;
+            ttsConfig: {
+                type: string;
+            };
+            whisperConfig: {
+                open: boolean;
+                autoSend: boolean;
+                autoTTSResponse: boolean;
+            };
+            chatInputGuide: {
+                open: boolean;
+                textList: string[];
+                customUrl: string;
+            };
+            instruction: string;
+            variables: any[];
+            fileSelectConfig: {
+                canSelectFile: boolean;
+                canSelectImg: boolean;
+                maxFiles: number;
+            };
+            welcomeText: string;
+        };
+        chatModels: string[];
+        name: string;
+        avatar: string;
+        intro: string;
+        type: string;
+        pluginInputs: any[];
     };
 }
 //# sourceMappingURL=index.d.ts.map

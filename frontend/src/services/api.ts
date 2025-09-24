@@ -58,7 +58,12 @@ export const chatService = {
       agentId,
       messages,
       stream: false,
-      options,
+      ...(options?.chatId ? { chatId: options.chatId } : {}),
+      ...(typeof options?.detail === 'boolean' ? { detail: options.detail } : {}),
+      ...(typeof options?.temperature === 'number' ? { temperature: options.temperature } : {}),
+      ...(typeof options?.maxTokens === 'number' ? { maxTokens: options.maxTokens } : {}),
+      ...(options?.variables ? { variables: options.variables } : {}),
+      ...(options?.responseChatItemId ? { responseChatItemId: options.responseChatItemId } : {}),
     });
     return response.data.data;
   },
@@ -68,7 +73,9 @@ export const chatService = {
     messages: OriginalChatMessage[],
     onChunk: (chunk: string) => void,
     onStatus?: (status: any) => void,
-    options?: ChatOptions
+    options?: ChatOptions,
+    onInteractive?: (data: any) => void,
+    onChatId?: (chatId: string) => void
   ): Promise<void> {
     console.log('发送流式消息请求:', { agentId, messageCount: messages.length, options });
     
@@ -82,7 +89,12 @@ export const chatService = {
         agentId,
         messages,
         stream: true,
-        options,
+        ...(options?.chatId ? { chatId: options.chatId } : {}),
+        ...(typeof options?.detail === 'boolean' ? { detail: options.detail } : {}),
+        ...(typeof options?.temperature === 'number' ? { temperature: options.temperature } : {}),
+        ...(typeof options?.maxTokens === 'number' ? { maxTokens: options.maxTokens } : {}),
+        ...(options?.variables ? { variables: options.variables } : {}),
+        ...(options?.responseChatItemId ? { responseChatItemId: options.responseChatItemId } : {}),
       }),
     });
 
@@ -152,45 +164,45 @@ export const chatService = {
                 case 'chunk':
                   // 后端自定义的 chunk 事件
                   if (data.content) {
-                    console.log('处理 chunk 事件:', data.content.substring(0, 50));
                     onChunk(data.content);
                   }
                   break;
-                  
+
                 case 'status':
                   // 后端自定义的 status 事件
-                  console.log('处理 status 事件:', data);
                   onStatus?.(data);
                   break;
-                  
-                case 'flowNodeStatus':
+
+                case 'flowNodeStatus': {
                   // FastGPT 官方流程节点状态事件
                   const statusData = {
                     type: 'flowNodeStatus',
                     status: data.status || 'running',
                     moduleName: data.name || data.moduleName || '未知模块'
                   };
-                  console.log('处理 flowNodeStatus 事件:', statusData);
                   onStatus?.(statusData);
                   break;
-                  
-                case 'answer':
+                }
+
+                case 'answer': {
                   // FastGPT 官方答案事件
                   const answerContent = data.choices?.[0]?.delta?.content || data.content || '';
-                  if (answerContent) {
-                    console.log('✅ 处理 answer 事件:', answerContent.substring(0, 50));
-                    console.log('🔄 准备调用 onChunk 回调，内容长度:', answerContent.length);
-                    onChunk(answerContent);
-                    console.log('✅ onChunk 回调调用完成');
-                  } else {
-                    console.log('⚠️ answer 事件但内容为空:', data);
-                  }
+                  if (answerContent) onChunk(answerContent);
                   break;
-                  
+                }
+
+                case 'interactive':
+                  // FastGPT 交互节点事件（detail=true 时出现）
+                  onInteractive?.(data);
+                  break;
+
+                case 'chatId':
+                  if (data?.chatId) onChatId?.(data.chatId);
+                  break;
+
                 default:
                   // 默认处理，兼容非 SSE 格式
                   if (data.content) {
-                    console.log('默认内容处理:', data.content.substring(0, 50));
                     onChunk(data.content);
                   }
               }

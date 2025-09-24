@@ -306,8 +306,9 @@ export class ChatProxyService {
     agentId: string,
     messages: ChatMessage[],
     onChunk: (chunk: string) => void,
-    onStatusChange?: (status: StreamStatus) => void,
-    options?: ChatOptions
+    onStatus: (status: StreamStatus) => void,
+    options?: ChatOptions,
+    onEvent?: (eventName: string, data: any) => void
   ): Promise<void> {
     const config = await this.agentService.getAgent(agentId);
     if (!config) {
@@ -334,6 +335,14 @@ export class ChatProxyService {
       // 构建请求头
       const headers = provider.buildHeaders(config);
       
+      // 在发送请求前，将本次使用的 chatId 透传给上层（用于交互节点继续运行复用 chatId）
+      try {
+        const usedChatId = (requestData as any)?.chatId;
+        if (usedChatId) {
+          onEvent?.('chatId', { chatId: usedChatId });
+        }
+      } catch (_) {}
+
       // 发送流式请求
       const response = await this.httpClient.post(
         config.endpoint,
@@ -350,11 +359,12 @@ export class ChatProxyService {
         provider,
         config,
         onChunk,
-        onStatusChange
+        onStatus,
+        onEvent
       );
     } catch (error) {
       console.error(`智能体 ${agentId} 流式请求失败:`, error);
-      onStatusChange?.({
+      onStatus?.({
         type: 'error',
         status: 'error',
         error: getErrorMessage(error),
@@ -371,7 +381,8 @@ export class ChatProxyService {
     provider: AIProvider,
     config: AgentConfig,
     onChunk: (chunk: string) => void,
-    onStatusChange?: (status: StreamStatus) => void
+    onStatus?: (status: StreamStatus) => void,
+    onEvent?: (eventName: string, data: any) => void
   ): Promise<void> {
     return new Promise((resolve, reject) => {
       let buffer = '';
@@ -409,7 +420,7 @@ export class ChatProxyService {
               
               if (dataStr === '[DONE]') {
                 console.log('流式响应完成');
-                onStatusChange?.({
+                onStatus?.({
                   type: 'complete',
                   status: 'completed',
                 });
@@ -428,11 +439,11 @@ export class ChatProxyService {
                     // FastGPT 流程节点状态事件
                     const statusEvent = {
                       type: 'flowNodeStatus' as const,
-                      status: data.status || 'running' as const,
+                      status: (data.status ?? 'running') as 'running' | 'completed' | 'error',
                       moduleName: data.name || data.moduleName || '未知模块',
                     };
                     console.log('发送流程节点状态:', statusEvent);
-                    onStatusChange?.(statusEvent);
+                    onStatus?.(statusEvent);
                     break;
 
                   case 'answer':
@@ -444,10 +455,16 @@ export class ChatProxyService {
                     }
                     break;
 
+                  case 'interactive':
+                    // FastGPT 交互节点事件（需要 detail=true）
+                    console.log('交互节点事件:', data);
+                    onEvent?.('interactive', data);
+                    break;
+
                   case 'flowResponses':
                     // FastGPT 流程响应事件（详细执行信息）
                     console.log('流程响应事件:', data);
-                    onStatusChange?.({
+                    onStatus?.({
                       type: 'progress',
                       status: 'completed',
                       moduleName: '执行完成',
@@ -479,7 +496,7 @@ export class ChatProxyService {
 
       stream.on('end', () => {
         console.log('流式响应结束');
-        onStatusChange?.({
+        onStatus?.({
           type: 'complete',
           status: 'completed',
         });
@@ -488,7 +505,7 @@ export class ChatProxyService {
 
       stream.on('error', (error: Error) => {
         console.error('流式响应错误:', error);
-        onStatusChange?.({
+        onStatus?.({
           type: 'error',
           status: 'error',
           error: error.message,

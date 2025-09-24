@@ -8,11 +8,16 @@ import { useChatStore } from '@/store/chatStore';
 interface MessageListProps {
   messages: ChatMessage[];
   isStreaming?: boolean;
+  // 为了兼容 init 交互，放宽参数类型
+  onInteractiveSelect?: (value: any) => void;
+  onInteractiveFormSubmit?: (values: any) => void;
 }
 
-export const MessageList: React.FC<MessageListProps> = memo(({ 
-  messages, 
-  isStreaming = false 
+export const MessageList: React.FC<MessageListProps> = memo(({
+  messages,
+  isStreaming = false,
+  onInteractiveSelect,
+  onInteractiveFormSubmit
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastMessageRef = useRef<HTMLDivElement>(null);
@@ -39,11 +44,13 @@ export const MessageList: React.FC<MessageListProps> = memo(({
             
             return (
               <div key={index}>
-                <MessageItem 
+                <MessageItem
                   message={message}
                   isStreaming={isStreaming && isLastMessage && isAssistantMessage}
                   currentAgent={currentAgent ?? undefined}
                   streamingStatus={streamingStatus ?? undefined}
+                  onInteractiveSelect={onInteractiveSelect}
+                  onInteractiveFormSubmit={onInteractiveFormSubmit}
                 />
                 {/* 最后一个消息的占位元素 */}
                 {isLastMessage && (

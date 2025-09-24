@@ -20,9 +20,14 @@ export type AgentStatus = 'active' | 'inactive' | 'error' | 'loading';
 /**
  * 聊天消息接口（按 huihua.md 要求的格式）
  */
+export type InteractiveData =
+  | { type: 'userSelect'; params: { description?: string; userSelectOptions: { key: string; value: string }[] } }
+  | { type: 'userInput'; params: { description?: string; inputForm: any[] } };
+
 export interface ChatMessage {
   AI?: string;    // AI回复内容
   HUMAN?: string; // 用户输入内容
+  interactive?: InteractiveData; // FastGPT 交互节点（流式 detail=true）
 }
 
 /**

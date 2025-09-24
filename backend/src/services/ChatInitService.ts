@@ -156,8 +156,8 @@ export class ChatInitService {
 
     for (let i = 0; i < chars.length; i++) {
       const char = chars[i];
-      onChunk(char);
-      
+      onChunk(char ?? '');
+
       // 添加延迟，模拟真实的打字效果
       if (i < chars.length - 1) {
         await new Promise(resolve => setTimeout(resolve, delay));

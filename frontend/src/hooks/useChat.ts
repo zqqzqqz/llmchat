@@ -72,7 +72,20 @@ export const useChat = () => {
           (status) => {
             setStreamingStatus(status);
           },
-          mergedOptions
+          mergedOptions,
+          // onInteractive: 收到交互节点后，新增一条交互气泡
+          (interactiveData) => {
+            try {
+              // 直接以交互数据作为一条新消息渲染
+              addMessage({ interactive: interactiveData });
+            } catch (e) {
+              console.warn('处理 interactive 事件失败:', e, interactiveData);
+            }
+          },
+          // onChatId: 可选记录
+          (cid) => {
+            console.log('收到 chatId 事件:', cid);
+          }
         );
       } else {
         // 非流式响应
@@ -105,7 +118,20 @@ export const useChat = () => {
     createNewSession,
   ]);
 
+  // 继续运行：交互节点-用户选择
+  const continueInteractiveSelect = useCallback(async (value: string) => {
+    await sendMessage(value);
+  }, [sendMessage]);
+
+  // 继续运行：交互节点-表单输入
+  const continueInteractiveForm = useCallback(async (values: Record<string, any>) => {
+    const content = JSON.stringify(values);
+    await sendMessage(content);
+  }, [sendMessage]);
+
   return {
     sendMessage,
+    continueInteractiveSelect,
+    continueInteractiveForm,
   };
 };
