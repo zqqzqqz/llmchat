@@ -54,6 +54,7 @@ export declare class ChatProxyService {
     private agentService;
     private httpClient;
     private providers;
+    private chatLog;
     constructor(agentService: AgentConfigService);
     private registerProvider;
     sendMessage(agentId: string, messages: ChatMessage[], options?: ChatOptions): Promise<ChatResponse>;

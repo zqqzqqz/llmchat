@@ -127,11 +127,11 @@ export const useChatStore = create<ChatState>()(
             };
             
             // 自动更新会话标题（huihua.md 要求：取自首条消息前30字符）
-            if (state.currentSession.messages.length === 0 && message.HUMAN) {
-              const newTitle = message.HUMAN.length > 30 
-                ? message.HUMAN.slice(0, 30) + '...' 
+            if (message.HUMAN && !state.currentSession.messages.some((m) => m.HUMAN !== undefined)) {
+              const newTitle = message.HUMAN.length > 30
+                ? message.HUMAN.slice(0, 30) + '...'
                 : message.HUMAN;
-              
+
               updatedAgentSessions[state.currentAgent.id] = updatedAgentSessions[state.currentAgent.id].map(session =>
                 session.id === state.currentSession!.id
                   ? { ...session, title: newTitle }

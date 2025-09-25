@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ChatProxyService = exports.AnthropicProvider = exports.OpenAIProvider = exports.FastGPTProvider = void 0;
 const axios_1 = __importDefault(require("axios"));
 const helpers_1 = require("@/utils/helpers");
+const ChatLogService_1 = require("./ChatLogService");
 class FastGPTProvider {
     constructor() {
         this.name = 'FastGPT';
@@ -184,6 +185,7 @@ exports.AnthropicProvider = AnthropicProvider;
 class ChatProxyService {
     constructor(agentService) {
         this.providers = new Map();
+        this.chatLog = new ChatLogService_1.ChatLogService();
         this.agentService = agentService;
         this.httpClient = axios_1.default.create({
             timeout: parseInt(process.env.REQUEST_TIMEOUT || '30000'),
@@ -211,7 +213,22 @@ class ChatProxyService {
             const requestData = provider.transformRequest(messages, config, false, options);
             const headers = provider.buildHeaders(config);
             const response = await this.httpClient.post(config.endpoint, requestData, { headers });
-            return provider.transformResponse(response.data);
+            const normalized = provider.transformResponse(response.data);
+            try {
+                this.chatLog.logCompletion({
+                    agentId,
+                    provider: config.provider,
+                    endpoint: config.endpoint,
+                    requestMeta: {
+                        messagesCount: Array.isArray(messages) ? messages.length : 0,
+                        chatId: requestData?.chatId,
+                    },
+                    rawResponse: response.data,
+                    normalizedResponse: normalized,
+                });
+            }
+            catch { }
+            return normalized;
         }
         catch (error) {
             console.error(`智能体 ${agentId} 请求失败:`, error);
@@ -236,9 +253,21 @@ class ChatProxyService {
         try {
             const requestData = provider.transformRequest(messages, config, true, options);
             const headers = provider.buildHeaders(config);
+            let usedChatId;
             try {
-                const usedChatId = requestData?.chatId;
+                usedChatId = requestData?.chatId;
                 if (usedChatId) {
+                    try {
+                        this.chatLog.logStreamEvent({
+                            agentId,
+                            chatId: usedChatId,
+                            provider: config.provider,
+                            endpoint: config.endpoint,
+                            eventType: 'chatId',
+                            data: { chatId: usedChatId },
+                        });
+                    }
+                    catch { }
                     onEvent?.('chatId', { chatId: usedChatId });
                 }
             }
@@ -247,7 +276,7 @@ class ChatProxyService {
                 headers,
                 responseType: 'stream',
             });
-            await this.handleStreamResponse(response.data, provider, config, onChunk, onStatus, onEvent);
+            await this.handleStreamResponse(response.data, provider, config, onChunk, onStatus, onEvent, { agentId, endpoint: config.endpoint, provider: config.provider, ...(usedChatId ? { chatId: usedChatId } : {}) });
         }
         catch (error) {
             console.error(`智能体 ${agentId} 流式请求失败:`, error);
@@ -259,7 +288,7 @@ class ChatProxyService {
             throw new Error(`智能体流式请求失败: ${(0, helpers_1.getErrorMessage)(error)}`);
         }
     }
-    async handleStreamResponse(stream, provider, config, onChunk, onStatus, onEvent) {
+    async handleStreamResponse(stream, provider, config, onChunk, onStatus, onEvent, ctx) {
         return new Promise((resolve, reject) => {
             let buffer = '';
             let currentEventType = '';
@@ -276,7 +305,6 @@ class ChatProxyService {
                         continue;
                     }
                     try {
-                        console.log('line----------------:', line);
                         if (line.startsWith('event: ')) {
                             currentEventType = line.slice(7).trim();
                             console.log('检测到事件类型:', currentEventType);
@@ -287,10 +315,18 @@ class ChatProxyService {
                             console.log('处理数据行:', { eventType: currentEventType, data: dataStr.substring(0, 100) });
                             if (dataStr === '[DONE]') {
                                 console.log('流式响应完成');
-                                onStatus?.({
-                                    type: 'complete',
-                                    status: 'completed',
-                                });
+                                try {
+                                    this.chatLog.logStreamEvent({
+                                        agentId: ctx?.agentId || 'unknown',
+                                        ...(ctx?.provider ? { provider: ctx.provider } : {}),
+                                        ...(ctx?.endpoint ? { endpoint: ctx.endpoint } : {}),
+                                        ...(ctx?.chatId ? { chatId: ctx.chatId } : {}),
+                                        eventType: 'complete',
+                                        data: { done: true }
+                                    });
+                                }
+                                catch { }
+                                onStatus?.({ type: 'complete', status: 'completed' });
                                 resolve();
                                 return;
                             }
@@ -298,45 +334,103 @@ class ChatProxyService {
                             if (config.provider === 'fastgpt' && config.features.streamingConfig.statusEvents) {
                                 console.log('处理 FastGPT 事件:', { eventType: currentEventType, data });
                                 switch (currentEventType) {
-                                    case 'flowNodeStatus':
+                                    case 'flowNodeStatus': {
                                         const statusEvent = {
                                             type: 'flowNodeStatus',
                                             status: (data.status ?? 'running'),
                                             moduleName: data.name || data.moduleName || '未知模块',
                                         };
-                                        console.log('发送流程节点状态:', statusEvent);
+                                        try {
+                                            this.chatLog.logStreamEvent({
+                                                agentId: ctx?.agentId || 'unknown',
+                                                ...(ctx?.provider ? { provider: ctx.provider } : {}),
+                                                ...(ctx?.endpoint ? { endpoint: ctx.endpoint } : {}),
+                                                ...(ctx?.chatId ? { chatId: ctx.chatId } : {}),
+                                                eventType: 'flowNodeStatus', data
+                                            });
+                                        }
+                                        catch { }
                                         onStatus?.(statusEvent);
                                         break;
-                                    case 'answer':
+                                    }
+                                    case 'answer': {
                                         const answerContent = data.choices?.[0]?.delta?.content || data.content || '';
+                                        try {
+                                            this.chatLog.logStreamEvent({
+                                                agentId: ctx?.agentId || 'unknown',
+                                                ...(ctx?.provider ? { provider: ctx.provider } : {}),
+                                                ...(ctx?.endpoint ? { endpoint: ctx.endpoint } : {}),
+                                                ...(ctx?.chatId ? { chatId: ctx.chatId } : {}),
+                                                eventType: 'answer', data
+                                            });
+                                        }
+                                        catch { }
                                         if (answerContent) {
                                             console.log('发送答案内容:', answerContent.substring(0, 50));
                                             onChunk(answerContent);
                                         }
                                         break;
-                                    case 'interactive':
-                                        console.log('交互节点事件:', data);
+                                    }
+                                    case 'interactive': {
+                                        try {
+                                            this.chatLog.logStreamEvent({
+                                                agentId: ctx?.agentId || 'unknown',
+                                                ...(ctx?.provider ? { provider: ctx.provider } : {}),
+                                                ...(ctx?.endpoint ? { endpoint: ctx.endpoint } : {}),
+                                                ...(ctx?.chatId ? { chatId: ctx.chatId } : {}),
+                                                eventType: 'interactive', data
+                                            });
+                                        }
+                                        catch { }
                                         onEvent?.('interactive', data);
                                         break;
-                                    case 'flowResponses':
-                                        console.log('流程响应事件:', data);
-                                        onStatus?.({
-                                            type: 'progress',
-                                            status: 'completed',
-                                            moduleName: '执行完成',
-                                        });
+                                    }
+                                    case 'flowResponses': {
+                                        try {
+                                            this.chatLog.logStreamEvent({
+                                                agentId: ctx?.agentId || 'unknown',
+                                                ...(ctx?.provider ? { provider: ctx.provider } : {}),
+                                                ...(ctx?.endpoint ? { endpoint: ctx.endpoint } : {}),
+                                                ...(ctx?.chatId ? { chatId: ctx.chatId } : {}),
+                                                eventType: 'flowResponses', data
+                                            });
+                                        }
+                                        catch { }
+                                        onStatus?.({ type: 'progress', status: 'completed', moduleName: '执行完成' });
                                         break;
-                                    default:
+                                    }
+                                    default: {
                                         const defaultContent = provider.transformStreamResponse(data);
                                         if (defaultContent) {
+                                            try {
+                                                this.chatLog.logStreamEvent({
+                                                    agentId: ctx?.agentId || 'unknown',
+                                                    ...(ctx?.provider ? { provider: ctx.provider } : {}),
+                                                    ...(ctx?.endpoint ? { endpoint: ctx.endpoint } : {}),
+                                                    ...(ctx?.chatId ? { chatId: ctx.chatId } : {}),
+                                                    eventType: 'chunk', data: defaultContent
+                                                });
+                                            }
+                                            catch { }
                                             console.log('默认内容处理:', defaultContent.substring(0, 50));
                                             onChunk(defaultContent);
                                         }
+                                    }
                                 }
                             }
                             else {
                                 const content = provider.transformStreamResponse(data);
                                 if (content) {
+                                    try {
+                                        this.chatLog.logStreamEvent({
+                                            agentId: ctx?.agentId || 'unknown',
+                                            ...(ctx?.provider ? { provider: ctx.provider } : {}),
+                                            ...(ctx?.endpoint ? { endpoint: ctx.endpoint } : {}),
+                                            ...(ctx?.chatId ? { chatId: ctx.chatId } : {}),
+                                            eventType: 'chunk', data: content
+                                        });
+                                    }
+                                    catch { }
                                     console.log('标准内容处理:', content.substring(0, 50));
                                     onChunk(content);
                                 }
@@ -350,19 +444,32 @@ class ChatProxyService {
             });
             stream.on('end', () => {
                 console.log('流式响应结束');
-                onStatus?.({
-                    type: 'complete',
-                    status: 'completed',
-                });
+                try {
+                    this.chatLog.logStreamEvent({
+                        agentId: ctx?.agentId || 'unknown',
+                        ...(ctx?.provider ? { provider: ctx.provider } : {}),
+                        ...(ctx?.endpoint ? { endpoint: ctx.endpoint } : {}),
+                        ...(ctx?.chatId ? { chatId: ctx.chatId } : {}),
+                        eventType: 'complete', data: { ended: true }
+                    });
+                }
+                catch { }
+                onStatus?.({ type: 'complete', status: 'completed' });
                 resolve();
             });
             stream.on('error', (error) => {
                 console.error('流式响应错误:', error);
-                onStatus?.({
-                    type: 'error',
-                    status: 'error',
-                    error: error.message,
-                });
+                try {
+                    this.chatLog.logStreamEvent({
+                        agentId: ctx?.agentId || 'unknown',
+                        ...(ctx?.provider ? { provider: ctx.provider } : {}),
+                        ...(ctx?.endpoint ? { endpoint: ctx.endpoint } : {}),
+                        ...(ctx?.chatId ? { chatId: ctx.chatId } : {}),
+                        eventType: 'error', data: { message: error.message }
+                    });
+                }
+                catch { }
+                onStatus?.({ type: 'error', status: 'error', error: error.message });
                 reject(error);
             });
         });

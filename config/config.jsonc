@@ -1,0 +1,20 @@
+{
+  // 通用配置文件（可扩展）
+  "logging": {
+    // 是否写日志
+    "enabled": true,
+    // 日志目录（相对于项目根目录）
+    "dir": "./log",
+    // 记录范围（非流式/流式）
+    "record": {
+      "normal": true,
+      "stream": true
+    },
+    // 包含内容（原始返回/归一化返回）
+    "include": {
+      "raw": true,
+      "normalized": true
+    }
+  }
+}
+

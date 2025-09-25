@@ -1,14 +1,15 @@
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
-import { 
-  AgentConfig, 
-  ChatMessage, 
-  ChatOptions, 
-  ChatResponse, 
+import {
+  AgentConfig,
+  ChatMessage,
+  ChatOptions,
+  ChatResponse,
   StreamStatus,
-  RequestHeaders 
+  RequestHeaders
 } from '@/types';
 import { AgentConfigService } from './AgentConfigService';
 import { generateId, generateTimestamp, getErrorMessage } from '@/utils/helpers';
+import { ChatLogService } from './ChatLogService';
 
 /**
  * AI提供商适配器接口
@@ -235,6 +236,7 @@ export class ChatProxyService {
   private agentService: AgentConfigService;
   private httpClient: AxiosInstance;
   private providers: Map<string, AIProvider> = new Map();
+  private chatLog: ChatLogService = new ChatLogService();
 
   constructor(agentService: AgentConfigService) {
     this.agentService = agentService;
@@ -291,8 +293,22 @@ export class ChatProxyService {
         { headers }
       );
 
-      // 转换响应格式
-      return provider.transformResponse(response.data);
+      // 转换响应格式并记录日志
+      const normalized = provider.transformResponse(response.data);
+      try {
+        this.chatLog.logCompletion({
+          agentId,
+          provider: config.provider,
+          endpoint: config.endpoint,
+          requestMeta: {
+            messagesCount: Array.isArray(messages) ? messages.length : 0,
+            chatId: (requestData as any)?.chatId,
+          },
+          rawResponse: response.data,
+          normalizedResponse: normalized,
+        });
+      } catch {}
+      return normalized;
     } catch (error) {
       console.error(`智能体 ${agentId} 请求失败:`, error);
       throw new Error(`智能体请求失败: ${getErrorMessage(error)}`);
@@ -336,9 +352,21 @@ export class ChatProxyService {
       const headers = provider.buildHeaders(config);
       
       // 在发送请求前，将本次使用的 chatId 透传给上层（用于交互节点继续运行复用 chatId）
+      let usedChatId: string | undefined;
       try {
-        const usedChatId = (requestData as any)?.chatId;
+        usedChatId = (requestData as any)?.chatId;
         if (usedChatId) {
+          // 记录 chatId 事件
+          try {
+            this.chatLog.logStreamEvent({
+              agentId,
+              chatId: usedChatId,
+              provider: config.provider,
+              endpoint: config.endpoint,
+              eventType: 'chatId',
+              data: { chatId: usedChatId },
+            });
+          } catch {}
           onEvent?.('chatId', { chatId: usedChatId });
         }
       } catch (_) {}
@@ -360,7 +388,8 @@ export class ChatProxyService {
         config,
         onChunk,
         onStatus,
-        onEvent
+        onEvent,
+        { agentId, endpoint: config.endpoint, provider: config.provider, ...(usedChatId ? { chatId: usedChatId } : {}) }
       );
     } catch (error) {
       console.error(`智能体 ${agentId} 流式请求失败:`, error);
@@ -382,11 +411,12 @@ export class ChatProxyService {
     config: AgentConfig,
     onChunk: (chunk: string) => void,
     onStatus?: (status: StreamStatus) => void,
-    onEvent?: (eventName: string, data: any) => void
+    onEvent?: (eventName: string, data: any) => void,
+    ctx?: { agentId: string; chatId?: string; endpoint: string; provider: string }
   ): Promise<void> {
     return new Promise((resolve, reject) => {
       let buffer = '';
-      let currentEventType = ''; // 追踪当前事件类型
+      let currentEventType = '';
 
       console.log('开始处理流式响应，提供商:', config.provider);
 
@@ -394,95 +424,126 @@ export class ChatProxyService {
         const chunkStr = chunk.toString();
         buffer += chunkStr;
         console.log('收到流式数据块:', chunkStr.substring(0, 200));
-        
+
         const lines = buffer.split('\n');
         buffer = lines.pop() || '';
 
         for (const line of lines) {
           if (line.trim() === '') {
-            // 空行重置事件类型
             currentEventType = '';
             continue;
           }
-          
+
           try {
-            // 处理 FastGPT 官方 SSE 格式
-            console.log('line----------------:', line);
             if (line.startsWith('event: ')) {
               currentEventType = line.slice(7).trim();
               console.log('检测到事件类型:', currentEventType);
               continue;
             }
-            
+
             if (line.startsWith('data: ')) {
               const dataStr = line.slice(6);
               console.log('处理数据行:', { eventType: currentEventType, data: dataStr.substring(0, 100) });
-              
+
               if (dataStr === '[DONE]') {
                 console.log('流式响应完成');
-                onStatus?.({
-                  type: 'complete',
-                  status: 'completed',
-                });
+                try { this.chatLog.logStreamEvent({
+                  agentId: ctx?.agentId || 'unknown',
+                  ...(ctx?.provider ? { provider: ctx.provider } : {}),
+                  ...(ctx?.endpoint ? { endpoint: ctx.endpoint } : {}),
+                  ...(ctx?.chatId ? { chatId: ctx.chatId } : {}),
+                  eventType: 'complete',
+                  data: { done: true }
+                }); } catch {}
+                onStatus?.({ type: 'complete', status: 'completed' });
                 resolve();
                 return;
               }
 
               const data = JSON.parse(dataStr);
-              
-              // 根据事件类型处理数据 - 特别针对 FastGPT
+
               if (config.provider === 'fastgpt' && config.features.streamingConfig.statusEvents) {
                 console.log('处理 FastGPT 事件:', { eventType: currentEventType, data });
 
                 switch (currentEventType) {
-                  case 'flowNodeStatus':
-                    // FastGPT 流程节点状态事件
+                  case 'flowNodeStatus': {
                     const statusEvent = {
                       type: 'flowNodeStatus' as const,
                       status: (data.status ?? 'running') as 'running' | 'completed' | 'error',
                       moduleName: data.name || data.moduleName || '未知模块',
                     };
-                    console.log('发送流程节点状态:', statusEvent);
+                    try { this.chatLog.logStreamEvent({
+                      agentId: ctx?.agentId || 'unknown',
+                      ...(ctx?.provider ? { provider: ctx.provider } : {}),
+                      ...(ctx?.endpoint ? { endpoint: ctx.endpoint } : {}),
+                      ...(ctx?.chatId ? { chatId: ctx.chatId } : {}),
+                      eventType: 'flowNodeStatus', data
+                    }); } catch {}
                     onStatus?.(statusEvent);
-                    break;
+                    break; }
 
-                  case 'answer':
-                    // FastGPT 答案内容事件
+                  case 'answer': {
                     const answerContent = data.choices?.[0]?.delta?.content || data.content || '';
+                    try { this.chatLog.logStreamEvent({
+                      agentId: ctx?.agentId || 'unknown',
+                      ...(ctx?.provider ? { provider: ctx.provider } : {}),
+                      ...(ctx?.endpoint ? { endpoint: ctx.endpoint } : {}),
+                      ...(ctx?.chatId ? { chatId: ctx.chatId } : {}),
+                      eventType: 'answer', data
+                    }); } catch {}
                     if (answerContent) {
                       console.log('发送答案内容:', answerContent.substring(0, 50));
                       onChunk(answerContent);
                     }
-                    break;
+                    break; }
 
-                  case 'interactive':
-                    // FastGPT 交互节点事件（需要 detail=true）
-                    console.log('交互节点事件:', data);
+                  case 'interactive': {
+                    try { this.chatLog.logStreamEvent({
+                      agentId: ctx?.agentId || 'unknown',
+                      ...(ctx?.provider ? { provider: ctx.provider } : {}),
+                      ...(ctx?.endpoint ? { endpoint: ctx.endpoint } : {}),
+                      ...(ctx?.chatId ? { chatId: ctx.chatId } : {}),
+                      eventType: 'interactive', data
+                    }); } catch {}
                     onEvent?.('interactive', data);
-                    break;
+                    break; }
 
-                  case 'flowResponses':
-                    // FastGPT 流程响应事件（详细执行信息）
-                    console.log('流程响应事件:', data);
-                    onStatus?.({
-                      type: 'progress',
-                      status: 'completed',
-                      moduleName: '执行完成',
-                    });
-                    break;
+                  case 'flowResponses': {
+                    try { this.chatLog.logStreamEvent({
+                      agentId: ctx?.agentId || 'unknown',
+                      ...(ctx?.provider ? { provider: ctx.provider } : {}),
+                      ...(ctx?.endpoint ? { endpoint: ctx.endpoint } : {}),
+                      ...(ctx?.chatId ? { chatId: ctx.chatId } : {}),
+                      eventType: 'flowResponses', data
+                    }); } catch {}
+                    onStatus?.({ type: 'progress', status: 'completed', moduleName: '执行完成' });
+                    break; }
 
-                  default:
-                    // 处理标准流式响应（非特定事件）
+                  default: {
                     const defaultContent = provider.transformStreamResponse(data);
                     if (defaultContent) {
+                      try { this.chatLog.logStreamEvent({
+                        agentId: ctx?.agentId || 'unknown',
+                        ...(ctx?.provider ? { provider: ctx.provider } : {}),
+                        ...(ctx?.endpoint ? { endpoint: ctx.endpoint } : {}),
+                        ...(ctx?.chatId ? { chatId: ctx.chatId } : {}),
+                        eventType: 'chunk', data: defaultContent
+                      }); } catch {}
                       console.log('默认内容处理:', defaultContent.substring(0, 50));
                       onChunk(defaultContent);
                     }
+                  }
                 }
               } else {
-                // 非 FastGPT 或未启用状态事件的标准处理
                 const content = provider.transformStreamResponse(data);
                 if (content) {
+                  try { this.chatLog.logStreamEvent({
+                    agentId: ctx?.agentId || 'unknown',
+                    ...(ctx?.provider ? { provider: ctx.provider } : {}),
+                    ...(ctx?.endpoint ? { endpoint: ctx.endpoint } : {}),
+                    ...(ctx?.chatId ? { chatId: ctx.chatId } : {}),
+                    eventType: 'chunk', data: content
+                  }); } catch {}
                   console.log('标准内容处理:', content.substring(0, 50));
                   onChunk(content);
                 }
@@ -496,20 +557,27 @@ export class ChatProxyService {
 
       stream.on('end', () => {
         console.log('流式响应结束');
-        onStatus?.({
-          type: 'complete',
-          status: 'completed',
-        });
+        try { this.chatLog.logStreamEvent({
+          agentId: ctx?.agentId || 'unknown',
+          ...(ctx?.provider ? { provider: ctx.provider } : {}),
+          ...(ctx?.endpoint ? { endpoint: ctx.endpoint } : {}),
+          ...(ctx?.chatId ? { chatId: ctx.chatId } : {}),
+          eventType: 'complete', data: { ended: true }
+        }); } catch {}
+        onStatus?.({ type: 'complete', status: 'completed' });
         resolve();
       });
 
       stream.on('error', (error: Error) => {
         console.error('流式响应错误:', error);
-        onStatus?.({
-          type: 'error',
-          status: 'error',
-          error: error.message,
-        });
+        try { this.chatLog.logStreamEvent({
+          agentId: ctx?.agentId || 'unknown',
+          ...(ctx?.provider ? { provider: ctx.provider } : {}),
+          ...(ctx?.endpoint ? { endpoint: ctx.endpoint } : {}),
+          ...(ctx?.chatId ? { chatId: ctx.chatId } : {}),
+          eventType: 'error', data: { message: error.message }
+        }); } catch {}
+        onStatus?.({ type: 'error', status: 'error', error: error.message });
         reject(error);
       });
     });
