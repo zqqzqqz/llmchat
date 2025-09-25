@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { Button } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
 import { Sun, Moon, Monitor, ChevronDown } from 'lucide-react';
 import { useTheme } from './ThemeProvider';
 import { ThemeMode } from '@/types';
@@ -56,14 +58,16 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({
   // 简单图标按钮
   if (variant === 'icon') {
     return (
-      <button
+      <IconButton
         onClick={toggleTheme}
-        className={`rounded-2xl bg-gradient-to-br from-white/15 to-white/5 backdrop-blur-md border border-white/30 hover:from-white/25 hover:to-white/10 transition-all duration-500 shadow-xl hover:shadow-2xl text-foreground focus:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 ${sizeClasses[size]}`}
+        variant="glass"
+        radius="lg"
+        className={`${sizeClasses[size]}`}
         title={getCurrentModeText()}
         aria-label="切换主题"
       >
         {getIcon(userPreference)}
-      </button>
+      </IconButton>
     );
   }
 
@@ -71,14 +75,17 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({
   if (variant === 'dropdown') {
     return (
       <div className="relative">
-        <button
+        <Button
           onClick={() => setDropdownOpen(!dropdownOpen)}
-          className={`flex items-center gap-2 rounded-2xl border border-white/30 bg-gradient-to-br from-white/15 to-white/5 backdrop-blur-md hover:from-white/25 hover:to-white/10 text-foreground transition-all duration-500 shadow-xl hover:shadow-2xl focus:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 ${sizeClasses[size]}`}
+          variant="secondary"
+          size="md"
+          radius="lg"
+          className={`flex items-center gap-2 border border-white/30 bg-gradient-to-br from-white/15 to-white/5 backdrop-blur-md hover:from-white/25 hover:to-white/10 transition-all duration-500 shadow-xl hover:shadow-2xl ${sizeClasses[size]}`}
         >
           {getIcon(userPreference)}
           {showLabel && <span>{getCurrentModeText()}</span>}
           <ChevronDown className="h-4 w-4 opacity-50" />
-        </button>
+        </Button>
 
         {dropdownOpen && (
           <>
@@ -92,13 +99,16 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({
             <div className="absolute right-0 top-full mt-1 w-48 bg-background/95 backdrop-blur-xl border border-border/50 rounded-2xl shadow-2xl z-20">
               <div className="py-1">
                 {(['light', 'dark', 'auto'] as ThemeMode[]).map((mode) => (
-                  <button
+                  <Button
                     key={mode}
                     onClick={() => {
                       setTheme(mode);
                       setDropdownOpen(false);
                     }}
-                    className={`w-full flex items-center gap-3 px-4 py-2 text-left hover:bg-gradient-to-br hover:from-[#6cb33f]/15 hover:to-[#6cb33f]/5 transition-all duration-200 ${userPreference === mode ? 'bg-[#6cb33f]/10 text-foreground' : 'text-foreground' }`}
+                    variant="ghost"
+                    size="md"
+                    radius="md"
+                    className={`w-full justify-start gap-3 px-4 py-2 text-left hover:bg-gradient-to-br hover:from-brand/15 hover:to-brand/5 transition-all duration-200 ${userPreference === mode ? 'bg-brand/10 text-foreground' : 'text-foreground' }`}
                   >
                     {getIcon(mode)}
                     <div>
@@ -110,9 +120,9 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({
                       )}
                     </div>
                     {userPreference === mode && (
-                      <div className="ml-auto w-2 h-2 bg-[#6cb33f] rounded-full" />
+                      <div className="ml-auto w-2 h-2 bg-brand rounded-full" />
                     )}
-                  </button>
+                  </Button>
                 ))}
               </div>
               
@@ -132,9 +142,12 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({
 
   // 默认按钮样式
   return (
-    <button
+    <Button
       onClick={toggleTheme}
-      className={`flex items-center gap-2 rounded-2xl border border-white/30 bg-gradient-to-br from-white/15 to-white/5 backdrop-blur-md hover:from-white/25 hover:to-white/10 text-foreground transition-all duration-500 shadow-xl hover:shadow-2xl focus:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 ${sizeClasses[size]}`}
+      variant="secondary"
+      size="md"
+      radius="lg"
+      className={`flex items-center gap-2 border border-white/30 bg-gradient-to-br from-white/15 to-white/5 backdrop-blur-md hover:from-white/25 hover:to-white/10 transition-all duration-500 shadow-xl hover:shadow-2xl ${sizeClasses[size]}`}
       title={`切换到${getLabel(userPreference === 'light' ? 'dark' : userPreference === 'dark' ? 'auto' : 'light')}`}
       aria-label="切换主题"
     >
@@ -144,7 +157,7 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({
           {getCurrentModeText()}
         </span>
       )}
-    </button>
+    </Button>
   );
 };
 

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Paperclip, Mic, Square } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
 import { ChatInputProps } from '@/types';
 
 export const MessageInput: React.FC<ChatInputProps> = ({
@@ -50,14 +51,16 @@ export const MessageInput: React.FC<ChatInputProps> = ({
     <div className="bg-background rounded-2xl border border-border/50 shadow-2xl backdrop-blur-md">
       <form onSubmit={handleSubmit} className="flex items-end gap-3 p-4">
         {/* 附件按钮 */}
-        <button
+        <IconButton
           type="button"
           onClick={handleFileUpload}
-          className="flex-shrink-0 p-2 rounded-2xl bg-gradient-to-br from-white/15 to-white/5 border border-white/30 hover:from-white/25 hover:to-white/10 text-foreground shadow-xl transition-colors"
+          variant="glass"
+          radius="md"
+          className="flex-shrink-0"
           title="附件"
         >
           <Paperclip className="h-5 w-5" />
-        </button>
+        </IconButton>
 
         {/* 文本输入区域 */}
         <div className="flex-1 relative">
@@ -80,10 +83,12 @@ export const MessageInput: React.FC<ChatInputProps> = ({
         {/* 右侧按钮组 */}
         <div className="flex items-center gap-2">
           {/* 语音记录按钮 */}
-          <button
+          <IconButton
             type="button"
             onClick={handleVoiceRecord}
-            className={`flex-shrink-0 p-2 transition-colors rounded-lg ${
+            variant="ghost"
+            radius="md"
+            className={`flex-shrink-0 ${
               isRecording
                 ? 'text-red-500 bg-red-50 dark:bg-red-900/20'
                 : 'text-muted-foreground hover:text-foreground hover:bg-accent/30'
@@ -91,7 +96,7 @@ export const MessageInput: React.FC<ChatInputProps> = ({
             title={isRecording ? '停止录音' : '语音输入'}
           >
             {isRecording ? <Square className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
-          </button>
+          </IconButton>
 
           {/* 发送按钮 */}
           <Button

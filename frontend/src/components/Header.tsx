@@ -1,5 +1,6 @@
 import React from 'react';
 import { Menu } from 'lucide-react';
+import { IconButton } from '@/components/ui/IconButton';
 import { AgentSelector } from './agents/AgentSelector';
 import { ThemeToggle } from './theme/ThemeToggle';
 import { useChatStore } from '@/store/chatStore';
@@ -12,13 +13,14 @@ export const Header: React.FC = () => {
       <div className="flex items-center justify-between max-w-none">
         {/* 左侧：菜单、智能体选择器 */}
         <div className="flex items-center gap-2 md:gap-4 flex-1">
-          <button
+          <IconButton
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="p-3 rounded-2xl bg-gradient-to-br from-white/15 to-white/5 backdrop-blur-md border border-white/30 hover:from-white/25 hover:to-white/10 transition-all duration-500 shadow-xl hover:shadow-2xl focus:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            variant="glass"
+            radius="lg"
             aria-label="切换侧边栏"
           >
-            <Menu className="h-5 w-5 text-[#6cb33f] drop-shadow-sm" />
-          </button>
+            <Menu className="h-5 w-5 text-brand drop-shadow-sm" />
+          </IconButton>
           
           {/* 智能体选择器 */}
           <div className="flex-1 max-w-md">

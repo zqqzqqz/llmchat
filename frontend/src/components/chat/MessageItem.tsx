@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { User, Copy, Check, RotateCcw, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -70,9 +71,12 @@ export const MessageItem: React.FC<MessageItemProps> = ({
                   </option>
                 ))}
               </select>
-              <button
+              <Button
                 onClick={() => { if ((data as any).origin === 'init') { const varKey = (data.params as any)?.varKey; onInteractiveSelect?.({ origin: 'init', key: varKey, value: selectedValue }); } else { onInteractiveSelect?.(selectedValue); } }}
-                className="px-3 py-1.5 text-sm rounded-lg bg-brand text-brand-foreground hover:bg-brand-hover"
+                variant="brand"
+                size="md"
+                radius="md"
+                className="px-3 py-1.5"
               >
 
 
@@ -86,7 +90,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({
 
 
                 {(data as any).origin === 'init' ? '开始对话' : '确定'}
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -147,12 +151,15 @@ export const MessageItem: React.FC<MessageItemProps> = ({
                 );
               })}
               <div className="pt-2">
-                <button
+                <Button
                   type="submit"
-                  className="px-4 py-2 text-sm rounded-lg bg-brand text-brand-foreground hover:bg-brand-hover"
+                  variant="brand"
+                  size="md"
+                  radius="md"
+                  className="px-4 py-2 text-sm"
                 >
                   {(data as any).origin === 'init' ? '开始对话' : '提交'}
-                </button>
+                </Button>
               </div>
             </form>
           </div>
@@ -304,33 +311,30 @@ export const MessageItem: React.FC<MessageItemProps> = ({
 
             {/* 操作按钮 */}
             <div className="flex items-center gap-2">
-              <Button
+              <IconButton
                 onClick={handleCopy}
                 variant="ghost"
-                size="icon"
                 radius="md"
                 title="复制"
               >
                 {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-              </Button>
+              </IconButton>
 
               {onRetry && (
-                <Button
+                <IconButton
                   onClick={onRetry}
                   variant="ghost"
-                  size="icon"
                   radius="md"
                   className="text-muted-foreground hover:text-foreground"
                   title="重新生成"
                 >
                   <RotateCcw className="h-4 w-4" />
-                </Button>
+                </IconButton>
               )}
 
-              <Button
+              <IconButton
                 onClick={() => setLiked(liked === true ? null : true)}
                 variant="ghost"
-                size="icon"
                 radius="md"
                 className={`${
                   liked === true
@@ -340,12 +344,11 @@ export const MessageItem: React.FC<MessageItemProps> = ({
                 title="点赞"
               >
                 <ThumbsUp className="h-4 w-4" />
-              </Button>
+              </IconButton>
 
-              <Button
+              <IconButton
                 onClick={() => setLiked(liked === false ? null : false)}
                 variant="ghost"
-                size="icon"
                 radius="md"
                 className={`${
                   liked === false
@@ -355,7 +358,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({
                 title="点踩"
               >
                 <ThumbsDown className="h-4 w-4" />
-              </Button>
+              </IconButton>
             </div>
           </div>
         </div>

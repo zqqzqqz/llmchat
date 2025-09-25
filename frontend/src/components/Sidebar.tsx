@@ -11,6 +11,7 @@ import {
   Clock
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
 import { useChatStore } from '@/store/chatStore';
 import { ChatSession } from '@/types';
 
@@ -206,26 +207,24 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => {
                     </div>
                   </div>
                   <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity">
-                    <Button
+                    <IconButton
                       onClick={(e) => {
                         e.stopPropagation();
                         handleStartEdit(session);
                       }}
                       variant="ghost"
-                      size="icon"
                       radius="md"
                       className="text-muted-foreground hover:text-foreground"
                     >
                       <Edit3 className="h-3 w-3" />
-                    </Button>
-                    <Button
+                    </IconButton>
+                    <IconButton
                       onClick={(e) => handleDeleteSession(session.id, e)}
                       variant="destructive"
-                      size="icon"
                       radius="md"
                     >
                       <Trash2 className="h-3 w-3" />
-                    </Button>
+                    </IconButton>
                   </div>
                 </>
               )}
