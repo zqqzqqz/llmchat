@@ -1,15 +1,16 @@
 import React, { useState, useRef } from 'react';
-import { 
-  MessageSquare, 
-  Plus, 
-  Trash2, 
-  Edit3, 
-  Check, 
+import {
+  MessageSquare,
+  Plus,
+  Trash2,
+  Edit3,
+  Check,
   X,
   Search,
   Calendar,
   Clock
 } from 'lucide-react';
+import { Button } from '@/components/ui/Button';
 import { useChatStore } from '@/store/chatStore';
 import { ChatSession } from '@/types';
 
@@ -142,7 +143,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => {
 
     return (
       <div className="mb-4">
-        <div className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+        <div className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
           {icon}
           {title}
         </div>
@@ -152,8 +153,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => {
               key={session.id}
               className={`group flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-colors ${
                 currentSession?.id === session.id
-                  ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
-                  : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300'
+                  ? 'bg-brand/10 text-foreground'
+                  : 'hover:bg-brand/10 text-foreground'
               }`}
               onClick={() => {
                 // huihua.md 要求：点击会话标题显示该会话的详细内容（messages列表）
@@ -168,27 +169,31 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => {
                     type="text"
                     value={editTitle}
                     onChange={(e) => setEditTitle(e.target.value)}
-                    className="flex-1 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 
-                      rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white
-                      focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="flex-1 px-2 py-1 text-sm rounded bg-background text-foreground border border-input focus:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
                     autoFocus
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') handleSaveEdit();
                       if (e.key === 'Escape') handleCancelEdit();
                     }}
                   />
-                  <button
+                  <Button
                     onClick={handleSaveEdit}
-                    className="p-1 text-green-600 hover:text-green-700"
+                    variant="ghost"
+                    size="icon"
+                    radius="md"
+                    className="text-brand hover:text-brand-hover"
                   >
                     <Check className="h-3 w-3" />
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     onClick={handleCancelEdit}
-                    className="p-1 text-gray-600 hover:text-gray-700"
+                    variant="ghost"
+                    size="icon"
+                    radius="md"
+                    className="text-muted-foreground hover:text-foreground"
                   >
                     <X className="h-3 w-3" />
-                  </button>
+                  </Button>
                 </div>
               ) : (
                 <>
@@ -201,21 +206,26 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => {
                     </div>
                   </div>
                   <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity">
-                    <button
+                    <Button
                       onClick={(e) => {
                         e.stopPropagation();
                         handleStartEdit(session);
                       }}
-                      className="p-1 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                      variant="ghost"
+                      size="icon"
+                      radius="md"
+                      className="text-muted-foreground hover:text-foreground"
                     >
                       <Edit3 className="h-3 w-3" />
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                       onClick={(e) => handleDeleteSession(session.id, e)}
-                      className="p-1 text-red-500 hover:text-red-700"
+                      variant="destructive"
+                      size="icon"
+                      radius="md"
                     >
                       <Trash2 className="h-3 w-3" />
-                    </button>
+                    </Button>
                   </div>
                 </>
               )}
@@ -239,7 +249,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => {
       {/* 侧边栏 */}
       <aside
         ref={sidebarRef}
-        className={`fixed left-0 top-0 h-full w-80 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 
+        className={`fixed left-0 top-0 h-full w-80 bg-sidebar text-sidebar-foreground border-r border-sidebar-border
           transform transition-transform duration-300 ease-in-out z-50 flex flex-col
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
           lg:relative lg:translate-x-0 lg:z-auto ${sidebarOpen ? 'lg:flex' : 'lg:hidden'} ${className}`}
@@ -248,29 +258,29 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => {
         onTouchEnd={handleTouchEnd}
       >
         {/* 头部 */}
-        <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-          <button
+        <div className="p-4 border-b border-border/50">
+          <Button
             onClick={createNewSession}
-            className="w-full flex items-center gap-3 px-4 py-3 bg-blue-500 hover:bg-blue-600 
-              text-white rounded-lg transition-colors font-medium"
+            variant="brand"
+            size="lg"
+            radius="lg"
+            className="w-full flex items-center gap-3 font-medium"
           >
             <Plus className="h-5 w-5" />
             新建对话
-          </button>
+          </Button>
         </div>
 
         {/* 搜索 */}
-        <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+        <div className="p-4 border-b border-border/50">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <input
               type="text"
               placeholder="搜索对话..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg
-                bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500
-                focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full pl-10 pr-4 py-2 rounded-xl border border-input bg-background text-foreground placeholder-muted-foreground focus:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus:border-transparent"
             />
           </div>
         </div>
@@ -278,7 +288,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => {
         {/* 会话列表 */}
         <div className="flex-1 overflow-y-auto p-4">
           {sessionsToDisplay.length === 0 ? (
-            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+            <div className="text-center py-8 text-muted-foreground">
               <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-50" />
               <p>还没有对话</p>
               <p className="text-sm">点击“新建对话”开始聊天</p>

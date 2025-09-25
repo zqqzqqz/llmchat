@@ -87,16 +87,16 @@ export const FastGPTStatusIndicator: React.FC<FastGPTStatusIndicatorProps> = ({
   };
 
   return (
-    <div className="fastgpt-status bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 rounded-lg p-4 border border-blue-200 dark:border-blue-700">
+    <div className="fastgpt-status bg-background/95 backdrop-blur-xl rounded-2xl p-4 border border-border/50 shadow-2xl">
       {/* FastGPT 特有状态信息 */}
       <div className="mb-3">
         <div className="flex items-center gap-4 text-sm">
-          <div className={`flex items-center gap-2 ${contextStatus === 'active' ? 'text-green-600' : 'text-gray-500'}`}>
+          <div className={`flex items-center gap-2 ${contextStatus === 'active' ? 'text-brand' : 'text-muted-foreground'}`}>
             <Bot className="h-4 w-4" />
             <span>上下文: {contextStatus === 'active' ? '激活' : '未激活'}</span>
           </div>
           <div className={`flex items-center gap-2 ${
-            knowledgeStatus === 'ready' ? 'text-green-600' : 
+            knowledgeStatus === 'ready' ? 'text-brand' :
             knowledgeStatus === 'error' ? 'text-red-500' : 'text-yellow-500'
           }`}>
             <Database className="h-4 w-4" />
@@ -111,11 +111,11 @@ export const FastGPTStatusIndicator: React.FC<FastGPTStatusIndicatorProps> = ({
       {/* 当前流程节点状态 */}
       {isStreaming && currentStatus && (
         <div className="current-module mb-3">
-          <div className="flex items-center gap-2 p-2 bg-white dark:bg-gray-800 rounded-md border">
+          <div className="flex items-center gap-2 p-2 bg-card text-card-foreground rounded-xl border border-border/50">
             <div className="animate-spin">
               <Workflow className="h-4 w-4 text-blue-500" />
             </div>
-            <span className="text-sm font-medium text-gray-900 dark:text-white">
+            <span className="text-sm font-medium text-foreground">
               正在执行: {currentStatus.moduleName || '准备中...'}
             </span>
           </div>
@@ -125,22 +125,22 @@ export const FastGPTStatusIndicator: React.FC<FastGPTStatusIndicatorProps> = ({
       {/* 流程执行历史 */}
       {moduleHistory.length > 0 && (
         <div className="module-history">
-          <div className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">
+          <div className="text-xs font-medium text-muted-foreground mb-2">
             执行历史
           </div>
           <div className="space-y-1">
             {moduleHistory.map((status, index) => (
-              <div key={index} className={`flex items-center gap-2 p-2 rounded text-xs ${
-                status.status === 'completed' ? 'bg-green-50 dark:bg-green-900/20' :
-                status.status === 'error' ? 'bg-red-50 dark:bg-red-900/20' :
-                'bg-blue-50 dark:bg-blue-900/20'
+              <div key={index} className={`flex items-center gap-2 p-2 rounded-xl text-xs ${
+                status.status === 'completed' ? 'bg-brand/10' :
+                status.status === 'error' ? 'bg-red-500/10' :
+                'bg-accent/30'
               }`}>
                 {getStatusIcon(status.status)}
                 {getModuleIcon(status.moduleName || '')}
                 <span className={`flex-1 ${
-                  status.status === 'completed' ? 'text-green-700 dark:text-green-300' :
-                  status.status === 'error' ? 'text-red-700 dark:text-red-300' :
-                  'text-blue-700 dark:text-blue-300'
+                  status.status === 'completed' ? 'text-brand' :
+                  status.status === 'error' ? 'text-red-600' :
+                  'text-foreground'
                 }`}>
                   {status.moduleName || '未知模块'}
                 </span>
@@ -158,7 +158,7 @@ export const FastGPTStatusIndicator: React.FC<FastGPTStatusIndicatorProps> = ({
 
       {/* 提示信息 */}
       {!isStreaming && moduleHistory.length === 0 && (
-        <div className="text-xs text-gray-500 dark:text-gray-400 text-center py-2">
+        <div className="text-xs text-muted-foreground text-center py-2">
           FastGPT 工作流准备就绪
         </div>
       )}

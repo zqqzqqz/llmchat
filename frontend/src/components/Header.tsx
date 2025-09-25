@@ -8,17 +8,16 @@ export const Header: React.FC = () => {
   const { sidebarOpen, setSidebarOpen } = useChatStore();
 
   return (
-    <header className="border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-3 sticky top-0 z-40">
+    <header className="sticky top-0 z-40 w-full backdrop-blur-xl bg-background/90 border-b border-border/50 px-4 py-3">
       <div className="flex items-center justify-between max-w-none">
         {/* 左侧：菜单、智能体选择器 */}
         <div className="flex items-center gap-2 md:gap-4 flex-1">
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors
-              focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
+            className="p-3 rounded-2xl bg-gradient-to-br from-white/15 to-white/5 backdrop-blur-md border border-white/30 hover:from-white/25 hover:to-white/10 transition-all duration-500 shadow-xl hover:shadow-2xl focus:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
             aria-label="切换侧边栏"
           >
-            <Menu className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+            <Menu className="h-5 w-5 text-[#6cb33f] drop-shadow-sm" />
           </button>
           
           {/* 智能体选择器 */}

@@ -58,10 +58,7 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({
     return (
       <button
         onClick={toggleTheme}
-        className={`rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors
-          focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50
-          text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white
-          ${sizeClasses[size]}`}
+        className={`rounded-2xl bg-gradient-to-br from-white/15 to-white/5 backdrop-blur-md border border-white/30 hover:from-white/25 hover:to-white/10 transition-all duration-500 shadow-xl hover:shadow-2xl text-foreground focus:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 ${sizeClasses[size]}`}
         title={getCurrentModeText()}
         aria-label="切换主题"
       >
@@ -76,11 +73,7 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({
       <div className="relative">
         <button
           onClick={() => setDropdownOpen(!dropdownOpen)}
-          className={`flex items-center gap-2 rounded-lg border border-gray-200 dark:border-gray-700
-            bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700
-            text-gray-700 dark:text-gray-300 transition-colors
-            focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50
-            ${sizeClasses[size]}`}
+          className={`flex items-center gap-2 rounded-2xl border border-white/30 bg-gradient-to-br from-white/15 to-white/5 backdrop-blur-md hover:from-white/25 hover:to-white/10 text-foreground transition-all duration-500 shadow-xl hover:shadow-2xl focus:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 ${sizeClasses[size]}`}
         >
           {getIcon(userPreference)}
           {showLabel && <span>{getCurrentModeText()}</span>}
@@ -96,8 +89,7 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({
             />
             
             {/* 下拉菜单 */}
-            <div className="absolute right-0 top-full mt-1 w-48 bg-white dark:bg-gray-800 
-              border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-20">
+            <div className="absolute right-0 top-full mt-1 w-48 bg-background/95 backdrop-blur-xl border border-border/50 rounded-2xl shadow-2xl z-20">
               <div className="py-1">
                 {(['light', 'dark', 'auto'] as ThemeMode[]).map((mode) => (
                   <button
@@ -106,12 +98,7 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({
                       setTheme(mode);
                       setDropdownOpen(false);
                     }}
-                    className={`w-full flex items-center gap-3 px-4 py-2 text-left
-                      hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors
-                      ${userPreference === mode 
-                        ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' 
-                        : 'text-gray-700 dark:text-gray-300'
-                      }`}
+                    className={`w-full flex items-center gap-3 px-4 py-2 text-left hover:bg-gradient-to-br hover:from-[#6cb33f]/15 hover:to-[#6cb33f]/5 transition-all duration-200 ${userPreference === mode ? 'bg-[#6cb33f]/10 text-foreground' : 'text-foreground' }`}
                   >
                     {getIcon(mode)}
                     <div>
@@ -123,7 +110,7 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({
                       )}
                     </div>
                     {userPreference === mode && (
-                      <div className="ml-auto w-2 h-2 bg-blue-500 rounded-full" />
+                      <div className="ml-auto w-2 h-2 bg-[#6cb33f] rounded-full" />
                     )}
                   </button>
                 ))}
@@ -147,11 +134,7 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({
   return (
     <button
       onClick={toggleTheme}
-      className={`flex items-center gap-2 rounded-lg border border-gray-200 dark:border-gray-700
-        bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700
-        text-gray-700 dark:text-gray-300 transition-colors
-        focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50
-        ${sizeClasses[size]}`}
+      className={`flex items-center gap-2 rounded-2xl border border-white/30 bg-gradient-to-br from-white/15 to-white/5 backdrop-blur-md hover:from-white/25 hover:to-white/10 text-foreground transition-all duration-500 shadow-xl hover:shadow-2xl focus:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 ${sizeClasses[size]}`}
       title={`切换到${getLabel(userPreference === 'light' ? 'dark' : userPreference === 'dark' ? 'auto' : 'light')}`}
       aria-label="切换主题"
     >

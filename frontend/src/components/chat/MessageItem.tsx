@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { User, Copy, Check, RotateCcw, ThumbsUp, ThumbsDown } from 'lucide-react';
+import { Button } from '@/components/ui/Button';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -52,14 +53,14 @@ export const MessageItem: React.FC<MessageItemProps> = ({
     const renderUserSelect = () => (
       <div className="flex justify-start">
         <div className="flex items-start gap-3 max-w-[80%] w-full">
-          <img src={avatarImg} alt="AI" className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
-          <div className="bg-white dark:bg-gray-800 rounded-2xl px-4 py-3 shadow-sm border border-gray-200 dark:border-gray-700 flex-1">
-            <div className="text-sm text-gray-700 dark:text-gray-200 mb-3 whitespace-pre-wrap">
+          <img src={avatarImg} alt="AI" className="w-8 h-8 rounded-full object-cover flex-shrink-0 ring-1 ring-border bg-muted" />
+          <div className="bg-card rounded-2xl px-4 py-3 shadow-sm border border-border flex-1">
+            <div className="text-sm text-foreground mb-3 whitespace-pre-wrap">
               {data.params?.description || '请选择一个选项以继续'}
             </div>
             <div className="flex items-center gap-2">
               <select
-                className="flex-1 px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                className="flex-1 px-3 py-2 text-sm rounded-lg border border-input bg-background text-foreground"
                 value={selectedValue}
                 onChange={(e) => setSelectedValue(e.target.value)}
               >
@@ -71,7 +72,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({
               </select>
               <button
                 onClick={() => { if ((data as any).origin === 'init') { const varKey = (data.params as any)?.varKey; onInteractiveSelect?.({ origin: 'init', key: varKey, value: selectedValue }); } else { onInteractiveSelect?.(selectedValue); } }}
-                className="px-3 py-1.5 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+                className="px-3 py-1.5 text-sm rounded-lg bg-brand text-brand-foreground hover:bg-brand-hover"
               >
 
 
@@ -95,8 +96,8 @@ export const MessageItem: React.FC<MessageItemProps> = ({
     const renderUserInput = () => (
       <div className="flex justify-start">
         <div className="flex items-start gap-3 max-w-[80%] w-full">
-          <img src={avatarImg} alt="AI" className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
-          <div className="bg-white dark:bg-gray-800 rounded-2xl px-4 py-3 shadow-sm border border-gray-200 dark:border-gray-700 flex-1">
+          <img src={avatarImg} alt="AI" className="w-8 h-8 rounded-full object-cover flex-shrink-0 ring-1 ring-border bg-muted" />
+          <div className="bg-card rounded-2xl px-4 py-3 shadow-sm border border-border flex-1">
             <div className="text-sm text-gray-700 dark:text-gray-200 mb-3 whitespace-pre-wrap">
               {data.params?.description || '请填写表单以继续'}
             </div>
@@ -117,7 +118,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({
                 const type = item?.type || 'input';
                 return (
                   <div key={idx} className="flex items-center gap-3">
-                    <label className="w-28 text-sm text-gray-600 dark:text-gray-300">{label}</label>
+                    <label className="w-28 text-sm text-muted-foreground">{label}</label>
                     {type === 'numberInput' ? (
                       <input
                         type="number"
@@ -148,7 +149,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({
               <div className="pt-2">
                 <button
                   type="submit"
-                  className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+                  className="px-4 py-2 text-sm rounded-lg bg-brand text-brand-foreground hover:bg-brand-hover"
                 >
                   {(data as any).origin === 'init' ? '开始对话' : '提交'}
                 </button>
@@ -191,7 +192,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({
     return (
       <div className="flex justify-end">
         <div className="flex items-start gap-3 max-w-[80%]">
-          <div className="bg-blue-500 text-white rounded-2xl px-4 py-3 shadow-sm">
+          <div className="bg-brand text-brand-foreground rounded-2xl px-4 py-3 shadow-sm">
             <div className="whitespace-pre-wrap break-words">
               {content}
             </div>
@@ -199,7 +200,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({
               {formatTime()}
             </div>
           </div>
-          <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
+          <div className="w-8 h-8 bg-brand rounded-full flex items-center justify-center flex-shrink-0 ring-1 ring-border">
             <User className="h-4 w-4 text-white" />
           </div>
         </div>
@@ -211,9 +212,9 @@ export const MessageItem: React.FC<MessageItemProps> = ({
   return (
     <div className="flex justify-start">
       <div className="flex items-start gap-3 max-w-[80%] w-full">
-        <img src={avatarImg} alt="AI" className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+        <img src={avatarImg} alt="AI" className="w-8 h-8 rounded-full object-cover flex-shrink-0 ring-1 ring-border bg-muted" />
 
-        <div className="bg-white dark:bg-gray-800 rounded-2xl px-4 py-3 shadow-sm border border-gray-200 dark:border-gray-700 flex-1">
+        <div className="bg-card rounded-2xl px-4 py-3 shadow-sm border border-border flex-1">
           {/* 消息内容 */}
           <div className="prose prose-sm max-w-none dark:prose-invert">
             <ReactMarkdown
@@ -228,14 +229,17 @@ export const MessageItem: React.FC<MessageItemProps> = ({
                     return (
                       <div className="relative group">
                         <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button
+                          <Button
                             onClick={() => navigator.clipboard.writeText(String(children))}
-                            className="px-2 py-1 text-xs bg-gray-700 text-white rounded hover:bg-gray-600"
+                            variant="secondary"
+                            size="sm"
+                            radius="md"
+                            className="px-2 py-1 h-auto text-xs"
                           >
                             Copy
-                          </button>
+                          </Button>
                         </div>
-                        <pre className="bg-gray-900 rounded-lg overflow-x-auto p-4 text-sm">
+                        <pre className="bg-background border border-border rounded-lg overflow-x-auto p-4 text-sm">
                           <code className={className}>
                             {children}
                           </code>
@@ -245,7 +249,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({
                   }
 
                   return (
-                    <code className="bg-gray-100 dark:bg-gray-700 px-1 py-0.5 rounded text-sm" {...props}>
+                    <code className="bg-muted px-1 py-0.5 rounded text-sm text-muted-foreground" {...props}>
                       {children}
                     </code>
                   );
@@ -293,54 +297,65 @@ export const MessageItem: React.FC<MessageItemProps> = ({
           </div>
 
           {/* 消息元数据 */}
-          <div className="flex items-center justify-between mt-3 pt-2 border-t border-gray-100 dark:border-gray-700">
-            <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
+          <div className="flex items-center justify-between mt-3 pt-2 border-t border-border/50">
+            <div className="flex items-center gap-4 text-xs text-muted-foreground">
               <span>{formatTime()}</span>
             </div>
 
             {/* 操作按钮 */}
             <div className="flex items-center gap-2">
-              <button
+              <Button
                 onClick={handleCopy}
-                className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                variant="ghost"
+                size="icon"
+                radius="md"
                 title="复制"
               >
                 {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-              </button>
+              </Button>
 
               {onRetry && (
-                <button
+                <Button
                   onClick={onRetry}
-                  className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                  variant="ghost"
+                  size="icon"
+                  radius="md"
+                  className="text-muted-foreground hover:text-foreground"
                   title="重新生成"
                 >
                   <RotateCcw className="h-4 w-4" />
-                </button>
+                </Button>
               )}
 
-              <button
+              <Button
                 onClick={() => setLiked(liked === true ? null : true)}
-                className={`p-1 transition-colors ${
+                variant="ghost"
+                size="icon"
+                radius="md"
+                className={`${
                   liked === true
                     ? 'text-green-500'
-                    : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
+                    : 'text-muted-foreground hover:text-foreground'
                 }`}
                 title="点赞"
               >
                 <ThumbsUp className="h-4 w-4" />
-              </button>
+              </Button>
 
-              <button
+              <Button
                 onClick={() => setLiked(liked === false ? null : false)}
-                className={`p-1 transition-colors ${
+                variant="ghost"
+                size="icon"
+                radius="md"
+                className={`${
                   liked === false
                     ? 'text-red-500'
-                    : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
+                    : 'text-muted-foreground hover:text-foreground'
                 }`}
                 title="点踩"
               >
                 <ThumbsDown className="h-4 w-4" />
-              </button>
+              </Button>
             </div>
           </div>
         </div>

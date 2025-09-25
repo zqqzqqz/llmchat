@@ -33,7 +33,7 @@ export const MessageList: React.FC<MessageListProps> = memo(({
   return (
     <div 
       ref={scrollRef}
-      className="h-full overflow-y-auto bg-gray-50 dark:bg-gray-900"
+      className="h-full overflow-y-auto bg-background"
     >
       <div className="max-w-4xl mx-auto px-4 py-6">
         <div className="space-y-6">
@@ -64,17 +64,17 @@ export const MessageList: React.FC<MessageListProps> = memo(({
           {/* 标准流式传输指示器（非 FastGPT） */}
           {isStreaming && (!currentAgent || currentAgent.provider !== 'fastgpt') && (
             <div className="flex justify-start">
-              <div className="flex items-center space-x-2 px-4 py-2 bg-white dark:bg-gray-800 rounded-lg shadow-sm">
+              <div className="flex items-center space-x-2 px-4 py-2 bg-background/95 backdrop-blur-md border border-border/50 rounded-2xl shadow-2xl">
                 <div className="flex space-x-1">
                   <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
                   <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }}></div>
                   <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }}></div>
                 </div>
-                <span className="text-sm text-gray-500 dark:text-gray-400">正在生成回答...</span>
+                <span className="text-sm text-muted-foreground">正在生成回答...</span>
                 {/* 在三点动画后展示 flowNodeStatus 数据（若存在） */}
                 
                 {streamingStatus?.type === 'flowNodeStatus' && (
-                  <span className="text-xs text-gray-400 dark:text-gray-500 ml-3">
+                  <span className="text-xs text-muted-foreground ml-3">
                     {streamingStatus.moduleName || '未知模块'} - {streamingStatus.status || 'running'}
                   </span>
                 )}

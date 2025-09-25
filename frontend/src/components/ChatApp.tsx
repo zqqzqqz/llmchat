@@ -13,7 +13,7 @@ export const ChatApp: React.FC = () => {
   }, [initializeAgentSessions]);
 
   return (
-    <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="flex h-screen bg-background text-foreground">
       {/* 侧边栏 */}
       <Sidebar />
       

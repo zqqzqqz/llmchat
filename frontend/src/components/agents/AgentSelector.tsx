@@ -68,17 +68,11 @@ export const AgentSelector: React.FC = () => {
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setAgentSelectorOpen(!agentSelectorOpen)}
-        className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm min-w-0
-          bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700
-          border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600
-          text-gray-900 dark:text-white transition-all duration-200
-          focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50
-          disabled:opacity-50 disabled:cursor-not-allowed
-          max-w-full sm:max-w-xs lg:max-w-sm"
+        className="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm min-w-0 bg-gradient-to-br from-white/15 to-white/5 backdrop-blur-lg border border-white/30 hover:from-white/25 hover:to-white/10 transition-all duration-500 shadow-xl hover:shadow-2xl text-foreground focus:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50 disabled:cursor-not-allowed max-w-full sm:max-w-xs lg:max-w-sm"
         disabled={loading}
       >
         <div className="flex items-center gap-2 min-w-0 flex-1">
-          <Bot className="h-4 w-4 flex-shrink-0 text-blue-500" />
+          <Bot className="h-4 w-4 flex-shrink-0 text-[#6cb33f] drop-shadow-sm" />
           <div className="min-w-0 flex-1">
             <div className="truncate font-medium">
               {currentAgent?.name || '选择智能体'}
@@ -105,17 +99,12 @@ export const AgentSelector: React.FC = () => {
             onClick={() => setAgentSelectorOpen(false)} />
           
           {/* 下拉菜单 */}
-          <div className="absolute top-full left-0 right-0 mt-2 z-50
-            lg:right-auto lg:w-80 
-            bg-white dark:bg-gray-800 
-            border border-gray-200 dark:border-gray-700 
-            rounded-xl shadow-lg 
-            animate-slide-down">
+          <div className="absolute top-full left-0 right-0 mt-2 z-50 lg:right-auto lg:w-80 bg-background/95 backdrop-blur-xl border border-border/50 rounded-2xl shadow-2xl animate-slide-down">
             
             {/* 标题 */}
-            <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-              <h3 className="font-medium text-gray-900 dark:text-white">选择智能体</h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            <div className="px-4 py-3 border-b border-border/50">
+              <h3 className="font-medium text-foreground">选择智能体</h3>
+              <p className="text-sm text-muted-foreground mt-1">
                 切换到不同的AI助手
               </p>
             </div>
@@ -139,29 +128,27 @@ export const AgentSelector: React.FC = () => {
                     <button
                       key={agent.id}
                       onClick={() => handleAgentSelect(agent)}
-                      className={`w-full text-left px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700
-                        transition-colors duration-150 flex items-start gap-3 ${
-                        currentAgent?.id === agent.id 
-                          ? 'bg-blue-50 dark:bg-blue-900/20 border-r-2 border-blue-500' 
+                      className={`w-full text-left px-4 py-3 transition-all duration-200 flex items-start gap-3 rounded-xl hover:bg-gradient-to-br hover:from-[#6cb33f]/15 hover:to-[#6cb33f]/5 ${
+                        currentAgent?.id === agent.id
+                          ? 'bg-[#6cb33f]/10 border-r-2 border-[#6cb33f]'
                           : ''
                       }`}
                     >
-                      <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full 
-                        flex items-center justify-center flex-shrink-0">
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#6cb33f]/25 to-[#6cb33f]/10 flex items-center justify-center flex-shrink-0 shadow-inner">
                         <Bot className="h-4 w-4 text-white" />
                       </div>
                       
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
-                          <span className="font-medium text-gray-900 dark:text-white truncate">
+                          <span className="font-medium text-foreground truncate">
                             {agent.name}
                           </span>
                           {currentAgent?.id === agent.id && (
-                            <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0" />
+                            <div className="w-2 h-2 bg-[#6cb33f] rounded-full flex-shrink-0" />
                           )}
                         </div>
                         
-                        <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2 mb-2">
+                        <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
                           {agent.description}
                         </p>
                         

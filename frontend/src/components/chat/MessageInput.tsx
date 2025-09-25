@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Paperclip, Mic, Square } from 'lucide-react';
+import { Button } from '@/components/ui/Button';
 import { ChatInputProps } from '@/types';
 
 export const MessageInput: React.FC<ChatInputProps> = ({
@@ -46,14 +47,13 @@ export const MessageInput: React.FC<ChatInputProps> = ({
   };
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-lg">
+    <div className="bg-background rounded-2xl border border-border/50 shadow-2xl backdrop-blur-md">
       <form onSubmit={handleSubmit} className="flex items-end gap-3 p-4">
         {/* 附件按钮 */}
         <button
           type="button"
           onClick={handleFileUpload}
-          className="flex-shrink-0 p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 
-            transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+          className="flex-shrink-0 p-2 rounded-2xl bg-gradient-to-br from-white/15 to-white/5 border border-white/30 hover:from-white/25 hover:to-white/10 text-foreground shadow-xl transition-colors"
           title="附件"
         >
           <Paperclip className="h-5 w-5" />
@@ -69,10 +69,10 @@ export const MessageInput: React.FC<ChatInputProps> = ({
             placeholder={placeholder}
             disabled={disabled}
             rows={1}
-            className="w-full resize-none bg-transparent text-gray-900 dark:text-white 
-              placeholder-gray-500 dark:placeholder-gray-400 border-0 outline-none
+            className="w-full resize-none bg-transparent text-foreground
+              placeholder-muted-foreground border-0 outline-none
               disabled:opacity-50 disabled:cursor-not-allowed
-              scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600"
+              scrollbar-thin scrollbar-thumb-muted"
             style={{ minHeight: '20px', maxHeight: '200px' }}
           />
         </div>
@@ -86,7 +86,7 @@ export const MessageInput: React.FC<ChatInputProps> = ({
             className={`flex-shrink-0 p-2 transition-colors rounded-lg ${
               isRecording
                 ? 'text-red-500 bg-red-50 dark:bg-red-900/20'
-                : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                : 'text-muted-foreground hover:text-foreground hover:bg-accent/30'
             }`}
             title={isRecording ? '停止录音' : '语音输入'}
           >
@@ -94,23 +94,22 @@ export const MessageInput: React.FC<ChatInputProps> = ({
           </button>
 
           {/* 发送按钮 */}
-          <button
+          <Button
             type="submit"
             disabled={disabled || !message.trim()}
-            className={`flex-shrink-0 p-3 rounded-xl transition-all duration-200 ${
-              disabled || !message.trim()
-                ? 'bg-gray-100 dark:bg-gray-700 text-gray-400 cursor-not-allowed'
-                : 'bg-blue-500 hover:bg-blue-600 text-white shadow-lg hover:shadow-xl transform hover:scale-105'
-            }`}
+            variant="brand"
+            size="icon"
+            radius="md"
             title="发送消息 (Enter)"
+            className={`${disabled || !message.trim() ? '' : 'shadow-xl hover:shadow-2xl transform hover:scale-105'}`}
           >
             <Send className="h-5 w-5" />
-          </button>
+          </Button>
         </div>
       </form>
       
       {/* 提示文本 */}
-      <div className="px-4 pb-3 text-xs text-gray-500 dark:text-gray-400 text-center">
+      <div className="px-4 pb-3 text-xs text-muted-foreground text-center">
         按 Enter 发送，Shift + Enter 换行
       </div>
     </div>

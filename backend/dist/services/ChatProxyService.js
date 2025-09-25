@@ -296,7 +296,6 @@ class ChatProxyService {
             stream.on('data', (chunk) => {
                 const chunkStr = chunk.toString();
                 buffer += chunkStr;
-                console.log('收到流式数据块:', chunkStr.substring(0, 200));
                 const lines = buffer.split('\n');
                 buffer = lines.pop() || '';
                 for (const line of lines) {
@@ -312,7 +311,6 @@ class ChatProxyService {
                         }
                         if (line.startsWith('data: ')) {
                             const dataStr = line.slice(6);
-                            console.log('处理数据行:', { eventType: currentEventType, data: dataStr.substring(0, 100) });
                             if (dataStr === '[DONE]') {
                                 console.log('流式响应完成');
                                 try {
@@ -332,7 +330,6 @@ class ChatProxyService {
                             }
                             const data = JSON.parse(dataStr);
                             if (config.provider === 'fastgpt' && config.features.streamingConfig.statusEvents) {
-                                console.log('处理 FastGPT 事件:', { eventType: currentEventType, data });
                                 switch (currentEventType) {
                                     case 'flowNodeStatus': {
                                         const statusEvent = {

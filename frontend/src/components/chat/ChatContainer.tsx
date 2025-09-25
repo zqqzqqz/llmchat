@@ -185,14 +185,14 @@ export const ChatContainer: React.FC = () => {
     return (
       <div className="flex-1 flex items-center justify-center p-8">
         <div className="text-center max-w-md">
-          <div className="w-16 h-16 mx-auto mb-6 bg-gradient-to-r from-blue-500 to-purple-600 rounded-2xl
+          <div className="w-16 h-16 mx-auto mb-6 bg-gradient-to-r from-brand to-brand/70 rounded-2xl
             flex items-center justify-center">
             <Bot className="h-8 w-8 text-white" />
           </div>
-          <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-3">
+          <h2 className="text-2xl font-semibold text-foreground mb-3">
             欢迎使用 LLMChat
           </h2>
-          <p className="text-gray-600 dark:text-gray-400 mb-6">
+          <p className="text-muted-foreground mb-6">
             请选择一个智能体开始您的对话之旅
           </p>
         </div>
@@ -206,7 +206,7 @@ export const ChatContainer: React.FC = () => {
       <div className="flex-1 flex flex-col">
         <div className="flex-1 flex items-center justify-center p-8">
           <div className="text-center max-w-2xl">
-            <div className="w-20 h-20 mx-auto mb-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-3xl
+            <div className="w-20 h-20 mx-auto mb-8 bg-gradient-to-r from-brand to-brand/70 rounded-3xl
               flex items-center justify-center shadow-lg">
               <Sparkles className="h-10 w-10 text-white" />
             </div>
@@ -219,20 +219,18 @@ export const ChatContainer: React.FC = () => {
 
             {/* 示例提示 */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-              <div className="p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700
-                hover:border-blue-300 dark:hover:border-blue-600 transition-colors cursor-pointer"
+              <div className="p-4 bg-background rounded-xl border border-border hover:bg-brand/10 transition-colors cursor-pointer"
                 onClick={() => sendMessage('你好，请介绍一下你的能力')}
               >
-                <h3 className="font-medium text-gray-900 dark:text-white mb-2">
+                <h3 className="font-medium text-foreground mb-2">
                   👋 介绍与能力
                 </h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
+                <p className="text-sm text-muted-foreground">
                   了解智能体的功能与特点
                 </p>
               </div>
 
-              <div className="p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700
-                hover:border-blue-300 dark:hover:border-blue-600 transition-colors cursor-pointer"
+              <div className="p-4 bg-background rounded-xl border border-border hover:bg-brand/10 transition-colors cursor-pointer"
                 onClick={() => sendMessage('你能帮我做什么？')}
               >
                 <h3 className="font-medium text-gray-900 dark:text-white mb-2">
@@ -247,7 +245,7 @@ export const ChatContainer: React.FC = () => {
         </div>
 
         {/* 输入区域 */}
-        <div className="border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-4">
+        <div className="border-t border-border/50 bg-background p-4">
           <div className="max-w-4xl mx-auto">
             {!hideComposer && (
               <MessageInput
@@ -264,7 +262,7 @@ export const ChatContainer: React.FC = () => {
 
   // 有消息时的正常聊天界面
   return (
-    <div className="flex flex-col h-full bg-white dark:bg-gray-900">
+    <div className="flex flex-col h-full bg-background">
       <div className="flex-1 overflow-hidden">
         <MessageList
             messages={messages}
@@ -273,7 +271,7 @@ export const ChatContainer: React.FC = () => {
             onInteractiveFormSubmit={handleInteractiveFormSubmit}
           />
       </div>
-      <div className="border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-4">
+      <div className="border-t border-border/50 bg-background p-4">
         <div className="max-w-4xl mx-auto">
           {!hideComposer && (
             <MessageInput
