@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import axios from 'axios';
 import { AgentConfigService } from '@/services/AgentConfigService';
 import { ChatProxyService } from '@/services/ChatProxyService';
 import { ChatInitService } from '@/services/ChatInitService';
@@ -76,6 +77,25 @@ export class ChatController {
       responseChatItemId: Joi.string().optional(),
     }).optional(),
   });
+  /**
+   * 点赞/点踩反馈请求验证Schema
+   */
+  private feedbackSchema = Joi.object({
+    agentId: Joi.string().required().messages({
+      'any.required': '智能体ID不能为空',
+      'string.empty': '智能体ID不能为空',
+    }),
+    chatId: Joi.string().required().messages({
+      'any.required': 'chatId不能为空',
+      'string.empty': 'chatId不能为空',
+    }),
+    dataId: Joi.string().required().messages({
+      'any.required': 'dataId不能为空',
+      'string.empty': 'dataId不能为空',
+    }),
+    userGoodFeedback: Joi.string().optional(),
+    userBadFeedback: Joi.string().optional(),
+  });
 
   /**
    * 发送聊天请求
@@ -144,22 +164,22 @@ export class ChatController {
       }
     } catch (error) {
       console.error('聊天请求处理失败:', error);
-      
+
       // 如果响应头已发送（流式响应中），不能再发送JSON响应
       if (res.headersSent) {
         return;
       }
-      
+
       const apiError: ApiError = {
         code: 'CHAT_REQUEST_FAILED',
         message: '聊天请求处理失败',
         timestamp: new Date().toISOString(),
       };
-      
+
       if (process.env.NODE_ENV === 'development') {
         apiError.details = { error: error instanceof Error ? error.message : error };
       }
-      
+
       res.status(500).json(apiError);
     }
   };
@@ -175,7 +195,7 @@ export class ChatController {
   ): Promise<void> {
     try {
       const response = await this.chatService.sendMessage(agentId, messages, options);
-      
+
       res.json({
         success: true,
         data: response,
@@ -187,7 +207,7 @@ export class ChatController {
         message: error instanceof Error ? error.message : '聊天服务错误',
         timestamp: new Date().toISOString(),
       };
-      
+
       res.status(500).json(apiError);
     }
   }
@@ -340,22 +360,22 @@ export class ChatController {
 
     } catch (error) {
       console.error('聊天初始化请求处理失败:', error);
-      
+
       // 如果响应头已发送（流式响应中），不能再发送JSON响应
       if (res.headersSent) {
         return;
       }
-      
+
       const apiError: ApiError = {
         code: 'CHAT_INIT_FAILED',
         message: '聊天初始化失败',
         timestamp: new Date().toISOString(),
       };
-      
+
       if (process.env.NODE_ENV === 'development') {
         apiError.details = { error: error instanceof Error ? error.message : error };
       }
-      
+
       res.status(500).json(apiError);
     }
   };
@@ -370,7 +390,7 @@ export class ChatController {
   ): Promise<void> {
     try {
       const initData = await this.initService.getInitData(appId, chatId);
-      
+
       res.json({
         success: true,
         data: initData,
@@ -382,7 +402,7 @@ export class ChatController {
         message: error instanceof Error ? error.message : '初始化服务错误',
         timestamp: new Date().toISOString(),
       };
-      
+
       res.status(500).json(apiError);
     }
   }
@@ -403,7 +423,7 @@ export class ChatController {
       res.setHeader('X-Accel-Buffering', 'no');
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Access-Control-Allow-Headers', 'Cache-Control');
-      
+
       // 立即刷新头部
       // @ts-ignore
       typeof (res as any).flushHeaders === 'function' && (res as any).flushHeaders();
@@ -431,7 +451,7 @@ export class ChatController {
         // 完成回调 - 返回完整初始化数据
         (initData) => {
           console.log('✅ 初始化数据获取完成');
-          this.sendSSEEvent(res, 'complete', { 
+          this.sendSSEEvent(res, 'complete', {
             data: initData,
             timestamp: new Date().toISOString()
           });
@@ -451,12 +471,83 @@ export class ChatController {
             timestamp: new Date().toISOString(),
           });
           res.end();
+
+
+  /**
+   *   
+   *  : /api/chat/feedback
+   */
+  const __tmp_feedback = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { error, value } = this.feedbackSchema.validate(req.body);
+      if (error) {
+        const apiError: ApiError = {
+          code: 'VALIDATION_ERROR',
+          message: error?.details?.[0]?.message || (error as any)?.message || '请求参数校验失败',
+          timestamp: new Date().toISOString(),
+        };
+        res.status(400).json(apiError);
+        return;
+      }
+
+      const { agentId, chatId, dataId, userGoodFeedback, userBadFeedback } = value as any;
+
+      // 获取智能体配置
+      const agent = await this.agentService.getAgent(agentId);
+      if (!agent) {
+        const apiError: ApiError = {
+          code: 'AGENT_NOT_FOUND',
+          message: `智能体不存在: ${agentId}`,
+          timestamp: new Date().toISOString(),
+        };
+        res.status(404).json(apiError);
+        return;
+      }
+
+      // 组装 FastGPT 反馈 API 地址
+      const baseUrl = agent.endpoint.replace('/api/v1/chat/completions', '');
+      const url = `${baseUrl}/api/core/chat/feedback/updateUserFeedback`;
+
+      // 构建请求体
+      const payload: any = {
+        appId: agent.appId || agent.id,
+        chatId,
+        dataId,
+        ...(userGoodFeedback ? { userGoodFeedback } : {}),
+        ...(userBadFeedback ? { userBadFeedback } : {}),
+      };
+
+      const headers = {
+        Authorization: `Bearer ${agent.apiKey}`,
+        'Content-Type': 'application/json'
+      };
+
+      const resp = await axios.post(url, payload, { headers });
+      if (resp.data?.code !== 200) {
+        throw new Error(resp.data?.message || '反馈失败');
+      }
+
+      res.json({ success: true, data: null, timestamp: new Date().toISOString() });
+    } catch (err) {
+      console.error('提交点赞/点踩反馈失败:', err);
+      const apiError: ApiError = {
+        code: 'FEEDBACK_FAILED',
+        message: err instanceof Error ? err.message : '反馈失败',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(500).json(apiError);
+    }
+
+  };
+
+
+
         }
       );
 
     } catch (error) {
       console.error('❌ 流式初始化请求处理失败:', error);
-      
+
       if (!res.headersSent) {
         const apiError: ApiError = {
           code: 'INIT_STREAM_ERROR',
@@ -473,6 +564,72 @@ export class ChatController {
       }
     }
   }
+  /**
+   * 点赞/点踩反馈
+   * POST: /api/chat/feedback
+   */
+  updateUserFeedback = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { error, value } = this.feedbackSchema.validate(req.body);
+      if (error) {
+        const apiError: ApiError = {
+          code: 'VALIDATION_ERROR',
+          message: error?.details?.[0]?.message || (error as any)?.message || '请求参数校验失败',
+          timestamp: new Date().toISOString(),
+        };
+        res.status(400).json(apiError);
+        return;
+      }
+
+      const { agentId, chatId, dataId, userGoodFeedback, userBadFeedback } = value as any;
+
+      // 获取智能体配置
+      const agent = await this.agentService.getAgent(agentId);
+      if (!agent) {
+        const apiError: ApiError = {
+          code: 'AGENT_NOT_FOUND',
+          message: `智能体不存在: ${agentId}`,
+          timestamp: new Date().toISOString(),
+        };
+        res.status(404).json(apiError);
+        return;
+      }
+
+      // 组装 FastGPT 反馈 API 地址
+      const baseUrl = agent.endpoint.replace('/api/v1/chat/completions', '');
+      const url = `${baseUrl}/api/core/chat/feedback/updateUserFeedback`;
+
+      // 构建请求体
+      const payload: any = {
+        appId: agent.appId || agent.id,
+        chatId,
+        dataId,
+        ...(userGoodFeedback ? { userGoodFeedback } : {}),
+        ...(userBadFeedback ? { userBadFeedback } : {}),
+      };
+
+      const headers = {
+        Authorization: `Bearer ${agent.apiKey}`,
+        'Content-Type': 'application/json'
+      };
+
+      const resp = await axios.post(url, payload, { headers });
+      if (resp.data?.code !== 200) {
+        throw new Error(resp.data?.message || '反馈失败');
+      }
+
+      res.json({ success: true, data: null, timestamp: new Date().toISOString() });
+    } catch (err) {
+      console.error('提交点赞/点踩反馈失败:', err);
+      const apiError: ApiError = {
+        code: 'FEEDBACK_FAILED',
+        message: err instanceof Error ? err.message : '反馈失败',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(500).json(apiError);
+    }
+  };
+
 
   /**
    * 获取聊天历史（如果有实现）
@@ -481,7 +638,7 @@ export class ChatController {
   getChatHistory = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { sessionId } = req.params;
-      
+
       // TODO: 实现聊天历史获取逻辑
       res.json({
         success: true,
@@ -498,7 +655,7 @@ export class ChatController {
         message: '获取聊天历史失败',
         timestamp: new Date().toISOString(),
       };
-      
+
       res.status(500).json(apiError);
     }
   };

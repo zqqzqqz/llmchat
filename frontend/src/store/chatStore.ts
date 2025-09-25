@@ -30,6 +30,7 @@ interface ChatState {
   setAgentsError: (error: string | null) => void;
   addMessage: (message: ChatMessage) => void;
   updateLastMessage: (content: string) => void;
+  setMessageFeedback: (messageId: string, feedback: 'good' | 'bad' | null) => void;
   clearMessages: () => void;
   setIsStreaming: (streaming: boolean) => void;
   setStreamingStatus: (status: StreamStatus | null) => void;
@@ -40,6 +41,7 @@ interface ChatState {
   deleteSession: (sessionId: string) => void;
   switchToSession: (sessionId: string) => void;
   renameSession: (sessionId: string, title: string) => void;
+  clearCurrentAgentSessions: () => void;
   initializeAgentSessions: () => void;
 }
 
@@ -166,10 +168,10 @@ export const useChatStore = create<ChatState>()(
                 ...msg,
                 AI: (msg.AI || '') + content,
                 _lastUpdate: Date.now() // 添加时间戳强制更新
-              };
+              } as ChatMessage;
               console.log('📝 消息更新:', {
                 beforeLength: msg.AI?.length || 0,
-                afterLength: updatedMessage.AI.length,
+                afterLength: (updatedMessage.AI || '').length,
                 addedContent: content.length
               });
               return updatedMessage;
@@ -177,9 +179,42 @@ export const useChatStore = create<ChatState>()(
             return msg;
           });
 
-          console.log('✅ 状态更新完成，最新消息长度:', messages[messages.length - 1]?.AI?.length || 0);
+          console.log('✅ 状态更新完成，最新消息长度:', (messages[messages.length - 1]?.AI || '').length);
 
           // 同步更新当前会话的消息
+          if (state.currentSession && state.currentAgent) {
+            const updatedAgentSessions = {
+              ...state.agentSessions,
+              [state.currentAgent.id]: state.agentSessions[state.currentAgent.id].map(session =>
+                session.id === state.currentSession!.id
+                  ? { ...session, messages, updatedAt: new Date() }
+                  : session
+              )
+            };
+
+            return {
+              messages,
+              agentSessions: updatedAgentSessions,
+              currentSession: {
+                ...state.currentSession,
+                messages,
+                updatedAt: new Date()
+              }
+            };
+          }
+
+          return { messages };
+        }),
+
+      // 更新指定消息的点赞/点踩持久化状态
+      setMessageFeedback: (messageId, feedback) =>
+        set((state) => {
+          // 更新当前消息列表
+          const messages = state.messages.map((msg) =>
+            msg.id === messageId ? ({ ...msg, feedback } as ChatMessage) : msg
+          );
+
+          // 同步更新当前会话
           if (state.currentSession && state.currentAgent) {
             const updatedAgentSessions = {
               ...state.agentSessions,
@@ -247,10 +282,10 @@ export const useChatStore = create<ChatState>()(
       deleteSession: (sessionId) =>
         set((state) => {
           if (!state.currentAgent) return state;
-          
+
           const updatedSessions = state.agentSessions[state.currentAgent.id].filter(s => s.id !== sessionId);
           const newCurrentSession = state.currentSession?.id === sessionId ? null : state.currentSession;
-          
+
           return {
             agentSessions: {
               ...state.agentSessions,
@@ -258,6 +293,20 @@ export const useChatStore = create<ChatState>()(
             },
             currentSession: newCurrentSession,
             messages: newCurrentSession ? newCurrentSession.messages : []
+          };
+        }),
+
+      // 清空当前智能体的所有会话
+      clearCurrentAgentSessions: () =>
+        set((state) => {
+          if (!state.currentAgent) return state;
+          return {
+            agentSessions: {
+              ...state.agentSessions,
+              [state.currentAgent.id]: []
+            },
+            currentSession: null,
+            messages: []
           };
         }),
 

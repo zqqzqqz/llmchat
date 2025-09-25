@@ -3,7 +3,7 @@
   id: string;              // 时间戳字符串(会话id)
   title: string;           // 会话标题（取自首条消息前30字符）
   agentId: string;         // 关联的智能体ID
-  messages: ChatMessage[{"AI": string, "HUMAN": string},{"AI": string, "HUMAN": string}]; // 消息列表
+  messages: ChatMessage[{"AI": string, "HUMAN": string,"id":string,"feedback":string},{"AI": string, "HUMAN": string,"id":string,"feedback":string}]; // 消息列表
   createdAt: Date;         // 创建时间
   updatedAt: Date;         // 更新时间
 },
@@ -11,7 +11,7 @@
   id: string;              // 时间戳字符串(会话id)
   title: string;           // 会话标题（取自首条消息前30字符）
   agentId: string;         // 关联的智能体ID
-  messages: ChatMessage[{"AI": string, "HUMAN": string},{"AI": string, "HUMAN": string}]; // 消息列表
+  messages: ChatMessage[{"AI": string, "HUMAN": string,"id":string,"feedback":string},{"AI": string, "HUMAN": string,"id":string,"feedback":string}]; // 消息列表
   createdAt: Date;         // 创建时间
   updatedAt: Date;         // 更新时间
 }]
@@ -19,14 +19,14 @@
   id: string;              // 时间戳字符串(会话id)
   title: string;           // 会话标题（取自首条消息前30字符）
   agentId: string;         // 关联的智能体ID
-  messages: ChatMessage[{"AI": string, "HUMAN": string},{"AI": string, "HUMAN": string}]; // 消息列表
+  messages: ChatMessage[{"AI": string, "HUMAN": string,"id":string,"feedback":string},{"AI": string, "HUMAN": string,"id":string,"feedback":string}]; // 消息列表
   createdAt: Date;         // 创建时间
   updatedAt: Date;         // 更新时间
 },{
   id: string;              // 时间戳字符串(会话id)
   title: string;           // 会话标题（取自首条消息前30字符）
   agentId: string;         // 关联的智能体ID
-  messages: ChatMessage[{"AI": string, "HUMAN": string},{"AI": string, "HUMAN": string}]; // 消息列表
+  messages: ChatMessage[{"AI": string, "HUMAN": string,"id":string,"feedback":string},{"AI": string, "HUMAN": string,"id":string,"feedback":string}]; // 消息列表
   createdAt: Date;         // 创建时间
   updatedAt: Date;         // 更新时间
 }]
@@ -35,7 +35,7 @@
   id: string;              // 时间戳字符串(会话id)
   title: string;           // 会话标题（取自首条消息前30字符）
   agentId: string;         // 关联的智能体ID
-  messages: ChatMessage[{"AI": string, "HUMAN": string},{"AI": string, "HUMAN": string}]; // 消息列表
+  messages: ChatMessage[{"AI": string, "HUMAN": string,"id":string,"feedback":string},{"AI": string, "HUMAN": string,"id":string,"feedback":string}]; // 消息列表
   createdAt: Date;         // 创建时间
   updatedAt: Date;         // 更新时间
 },
@@ -43,23 +43,23 @@
   id: string;              // 时间戳字符串(会话id)
   title: string;           // 会话标题（取自首条消息前30字符）
   agentId: string;         // 关联的智能体ID
-  messages: ChatMessage[{"AI": string, "HUMAN": string},{"AI": string, "HUMAN": string}]; // 消息列表
+  messages: ChatMessage[{"AI": string, "HUMAN": string,"id":string,"feedback":string},{"AI": string, "HUMAN": string,"id":string,"feedback":string}]; // 消息列表
   createdAt: Date;         // 创建时间
   updatedAt: Date;         // 更新时间
-}]就显示两个会话标题，点击会话标题，则显示该会话的详细内容，如 messages: ChatMessage[{"AI": string, "HUMAN": string},{"AI": string, "HUMAN": string}]; // 消息列表
+}]就显示两个会话标题，点击会话标题，则显示该会话的详细内容，如 messages: ChatMessage[{"AI": string, "HUMAN": string,"id":string,"feedback":string},{"AI": string, "HUMAN": string,"id":string,"feedback":string}]; // 消息列表
 
 3、开启新对话，agentId:[{
   id: string;              // 时间戳字符串(会话id)
   title: string;           // 会话标题（取自首条消息前30字符）
   agentId: string;         // 关联的智能体ID
-  messages: ChatMessage[{"AI": string, "HUMAN": string},{"AI": string, "HUMAN": string}]; // 消息列表
+  messages: ChatMessage[{"AI": string, "HUMAN": string,"id":string,"feedback":string},{"AI": string, "HUMAN": string,"id":string,"feedback":string}]; // 消息列表
   createdAt: Date;         // 创建时间
   updatedAt: Date;         // 更新时间
 }]就增加一个字典数据然后messages为空如就变成了agentId:[{
   id: string;              // 时间戳字符串(会话id)
   title: string;           // 会话标题（取自首条消息前30字符）
   agentId: string;         // 关联的智能体ID
-  messages: ChatMessage[{"AI": string, "HUMAN": string},{"AI": string, "HUMAN": string}]; // 消息列表
+  messages: ChatMessage[{"AI": string, "HUMAN": string,"id":string,"feedback":string},{"AI": string, "HUMAN": string,"id":string,"feedback":string}]; // 消息列表
   createdAt: Date;         // 创建时间
   updatedAt: Date;         // 更新时间
 },{

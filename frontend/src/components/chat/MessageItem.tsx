@@ -9,6 +9,8 @@ import rehypeHighlight from 'rehype-highlight';
 import rehypeRaw from 'rehype-raw';
 import { ChatMessage, Agent, StreamStatus } from '@/types';
 import 'highlight.js/styles/github-dark.css';
+import { useChatStore } from '@/store/chatStore';
+import { chatService } from '@/services/api';
 
 import avatarImg from '@/img/4.png';
 
@@ -171,11 +173,65 @@ export const MessageItem: React.FC<MessageItemProps> = ({
     if (data.type === 'userInput') return renderUserInput();
   }
 
-  const [liked, setLiked] = useState<boolean | null>(null);
+  const [likeLoading, setLikeLoading] = useState<boolean>(false);
 
   // huihua.md 格式：检查是用户消息还是 AI 消息
   const isUser = message.HUMAN !== undefined;
   const content = isUser ? message.HUMAN : message.AI;
+
+  // 从全局store获取当前会话和反馈更新方法
+  const { currentSession, setMessageFeedback } = useChatStore();
+  const agent = currentAgent; // 已通过props传入
+  const canFeedback = !isUser && !!message.id && agent?.provider === 'fastgpt';
+
+  // 由消息上的持久化字段推导本地显示态
+  const liked: boolean | null = message.feedback === 'good' ? true : message.feedback === 'bad' ? false : null;
+
+  const submitFeedback = async (type: 'good' | 'bad', cancel = false) => {
+    if (!canFeedback || !agent || !currentSession) return;
+    setLikeLoading(true);
+    try {
+      await chatService.updateUserFeedback(agent.id, currentSession.id, message.id!, type, cancel);
+    } finally {
+      setLikeLoading(false);
+    }
+  };
+
+  const handleLikeClick = async () => {
+    if (!canFeedback || likeLoading) return;
+    try {
+      if (liked === true) {
+        await submitFeedback('good', true);
+        setMessageFeedback(message.id!, null);
+      } else {
+        if (liked === false) {
+          await submitFeedback('bad', true);
+        }
+        await submitFeedback('good', false);
+        setMessageFeedback(message.id!, 'good');
+      }
+    } catch (e) {
+      console.error('点赞操作失败', e);
+    }
+  };
+
+  const handleDislikeClick = async () => {
+    if (!canFeedback || likeLoading) return;
+    try {
+      if (liked === false) {
+        await submitFeedback('bad', true);
+        setMessageFeedback(message.id!, null);
+      } else {
+        if (liked === true) {
+          await submitFeedback('good', true);
+        }
+        await submitFeedback('bad', false);
+        setMessageFeedback(message.id!, 'bad');
+      }
+    } catch (e) {
+      console.error('点踩操作失败', e);
+    }
+  };
 
   const handleCopy = async () => {
     try {
@@ -332,33 +388,39 @@ export const MessageItem: React.FC<MessageItemProps> = ({
                 </IconButton>
               )}
 
-              <IconButton
-                onClick={() => setLiked(liked === true ? null : true)}
-                variant="ghost"
-                radius="md"
-                className={`${
-                  liked === true
-                    ? 'text-green-500'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-                title="点赞"
-              >
-                <ThumbsUp className="h-4 w-4" />
-              </IconButton>
+              {canFeedback && (
+                <>
+                  <IconButton
+                    onClick={handleLikeClick}
+                    variant="ghost"
+                    radius="md"
+                    disabled={likeLoading}
+                    className={`${
+                      liked === true
+                        ? 'text-green-500'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                    title="点赞"
+                  >
+                    <ThumbsUp className="h-4 w-4" />
+                  </IconButton>
 
-              <IconButton
-                onClick={() => setLiked(liked === false ? null : false)}
-                variant="ghost"
-                radius="md"
-                className={`${
-                  liked === false
-                    ? 'text-red-500'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-                title="点踩"
-              >
-                <ThumbsDown className="h-4 w-4" />
-              </IconButton>
+                  <IconButton
+                    onClick={handleDislikeClick}
+                    variant="ghost"
+                    radius="md"
+                    disabled={likeLoading}
+                    className={`${
+                      liked === false
+                        ? 'text-red-500'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                    title="点踩"
+                  >
+                    <ThumbsDown className="h-4 w-4" />
+                  </IconButton>
+                </>
+              )}
             </div>
           </div>
         </div>

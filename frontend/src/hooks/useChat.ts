@@ -35,9 +35,13 @@ export const useChat = () => {
     };
     addMessage(userMessage);
 
-    // 创建助手消息占位符
+    // 生成本次 AI 响应的唯一 dataId，并作为 FastGPT responseChatItemId
+    const responseId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    // 创建助手消息占位符（携带 dataId）
     const assistantMessage: ChatMessage = {
-      AI: ''
+      AI: '',
+      id: responseId
     };
     addMessage(assistantMessage);
 
@@ -55,9 +59,9 @@ export const useChat = () => {
 
     // 透传 chatId 到后端（以会话 id 作为 chatId），保留其他 options
     const mergedOptions: ChatOptions | undefined = sessionIdForChat
-      ? { ...options, chatId: sessionIdForChat }
-      : options;
-    
+      ? { ...options, chatId: sessionIdForChat, responseChatItemId: responseId }
+      : { ...options, responseChatItemId: responseId };
+
     try {
       setIsStreaming(true);
       

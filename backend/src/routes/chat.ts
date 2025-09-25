@@ -15,4 +15,8 @@ router.get('/init', chatController.chatInit);
 // GET /api/chat/history/:sessionId
 router.get('/history/:sessionId', chatController.getChatHistory);
 
+// 点赞/点踩反馈
+// POST /api/chat/feedback
+router.post('/feedback', chatController.updateUserFeedback);
+
 export { router as chatRoutes };

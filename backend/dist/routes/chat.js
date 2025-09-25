@@ -9,4 +9,5 @@ const chatController = new ChatController_1.ChatController();
 router.post('/completions', chatController.chatCompletions);
 router.get('/init', chatController.chatInit);
 router.get('/history/:sessionId', chatController.getChatHistory);
+router.post('/feedback', chatController.updateUserFeedback);
 //# sourceMappingURL=chat.js.map

@@ -78,7 +78,7 @@ export const chatService = {
     onChatId?: (chatId: string) => void
   ): Promise<void> {
     console.log('发送流式消息请求:', { agentId, messageCount: messages.length, options });
-    
+
     const response = await fetch('/api/chat/completions', {
       method: 'POST',
       headers: {
@@ -125,7 +125,7 @@ export const chatService = {
 
         const chunk = decoder.decode(value);
         buffer += chunk;
-        
+
         // 按行分割处理
         const lines = buffer.split('\n');
         buffer = lines.pop() || ''; // 保留最后一个不完整的行
@@ -136,29 +136,29 @@ export const chatService = {
             currentEventType = '';
             continue;
           }
-          
+
           console.log('处理 SSE 行:', line);
-          
+
           // 处理 SSE 事件类型
           if (line.startsWith('event: ')) {
             currentEventType = line.slice(7).trim();
             console.log('设置事件类型:', currentEventType);
             continue;
           }
-          
+
           // 处理 SSE 数据
           if (line.startsWith('data: ')) {
             const dataStr = line.slice(6);
-            
+
             if (dataStr === '[DONE]') {
               console.log('收到完成信号');
               return;
             }
-            
+
             try {
               const data = JSON.parse(dataStr);
               console.log('解析 SSE 数据:', { eventType: currentEventType, data });
-              
+
               // 根据事件类型处理数据
               switch (currentEventType) {
                 case 'chunk':
@@ -306,4 +306,27 @@ export const chatService = {
       reader.releaseLock();
     }
   },
+
+  async updateUserFeedback(
+    agentId: string,
+    chatId: string,
+    dataId: string,
+    type: 'good' | 'bad',
+    cancel: boolean = false
+  ): Promise<void> {
+    try {
+      const payload: any = {
+        agentId,
+        chatId,
+        dataId,
+        ...(type === 'good' && !cancel ? { userGoodFeedback: 'yes' } : {}),
+        ...(type === 'bad' && !cancel ? { userBadFeedback: 'yes' } : {}),
+      };
+      await api.post('/chat/feedback', payload);
+    } catch (e) {
+      console.error('提交点赞/点踩反馈失败:', e);
+      throw e;
+    }
+  }
+
 };

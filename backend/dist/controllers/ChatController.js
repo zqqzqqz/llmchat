@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ChatController = void 0;
+const axios_1 = __importDefault(require("axios"));
 const AgentConfigService_1 = require("@/services/AgentConfigService");
 const ChatProxyService_1 = require("@/services/ChatProxyService");
 const ChatInitService_1 = require("@/services/ChatInitService");
@@ -54,6 +55,22 @@ class ChatController {
                 variables: joi_1.default.object().optional(),
                 responseChatItemId: joi_1.default.string().optional(),
             }).optional(),
+        });
+        this.feedbackSchema = joi_1.default.object({
+            agentId: joi_1.default.string().required().messages({
+                'any.required': '智能体ID不能为空',
+                'string.empty': '智能体ID不能为空',
+            }),
+            chatId: joi_1.default.string().required().messages({
+                'any.required': 'chatId不能为空',
+                'string.empty': 'chatId不能为空',
+            }),
+            dataId: joi_1.default.string().required().messages({
+                'any.required': 'dataId不能为空',
+                'string.empty': 'dataId不能为空',
+            }),
+            userGoodFeedback: joi_1.default.string().optional(),
+            userBadFeedback: joi_1.default.string().optional(),
         });
         this.chatCompletions = async (req, res, next) => {
             try {
@@ -178,6 +195,58 @@ class ChatController {
                 if (process.env.NODE_ENV === 'development') {
                     apiError.details = { error: error instanceof Error ? error.message : error };
                 }
+                res.status(500).json(apiError);
+            }
+        };
+        this.updateUserFeedback = async (req, res, next) => {
+            try {
+                const { error, value } = this.feedbackSchema.validate(req.body);
+                if (error) {
+                    const apiError = {
+                        code: 'VALIDATION_ERROR',
+                        message: error?.details?.[0]?.message || error?.message || '请求参数校验失败',
+                        timestamp: new Date().toISOString(),
+                    };
+                    res.status(400).json(apiError);
+                    return;
+                }
+                const { agentId, chatId, dataId, userGoodFeedback, userBadFeedback } = value;
+                const agent = await this.agentService.getAgent(agentId);
+                if (!agent) {
+                    const apiError = {
+                        code: 'AGENT_NOT_FOUND',
+                        message: `智能体不存在: ${agentId}`,
+                        timestamp: new Date().toISOString(),
+                    };
+                    res.status(404).json(apiError);
+                    return;
+                }
+                const baseUrl = agent.endpoint.replace('/api/v1/chat/completions', '');
+                const url = `${baseUrl}/api/core/chat/feedback/updateUserFeedback`;
+                const payload = {
+                    appId: agent.appId || agent.id,
+                    chatId,
+                    dataId,
+                    ...(userGoodFeedback ? { userGoodFeedback } : {}),
+                    ...(userBadFeedback ? { userBadFeedback } : {}),
+                };
+                const headers = {
+                    Authorization: `Bearer ${agent.apiKey}`,
+                    'Content-Type': 'application/json'
+                };
+                const resp = await axios_1.default.post(url, payload, { headers });
+                if (resp.data?.code !== 200) {
+                    throw new Error(resp.data?.message || '反馈失败');
+                }
+                res.json({ success: true, data: null, timestamp: new Date().toISOString() });
+            }
+            catch (err) {
+                console.error('提交点赞/点踩反馈失败:', err);
+                const apiError = {
+                    code: 'FEEDBACK_FAILED',
+                    message: err instanceof Error ? err.message : '反馈失败',
+                    timestamp: new Date().toISOString(),
+                };
                 res.status(500).json(apiError);
             }
         };
@@ -348,6 +417,58 @@ class ChatController {
                     timestamp: new Date().toISOString(),
                 });
                 res.end();
+                const __tmp_feedback = async (req, res, next) => {
+                    try {
+                        const { error, value } = this.feedbackSchema.validate(req.body);
+                        if (error) {
+                            const apiError = {
+                                code: 'VALIDATION_ERROR',
+                                message: error?.details?.[0]?.message || error?.message || '请求参数校验失败',
+                                timestamp: new Date().toISOString(),
+                            };
+                            res.status(400).json(apiError);
+                            return;
+                        }
+                        const { agentId, chatId, dataId, userGoodFeedback, userBadFeedback } = value;
+                        const agent = await this.agentService.getAgent(agentId);
+                        if (!agent) {
+                            const apiError = {
+                                code: 'AGENT_NOT_FOUND',
+                                message: `智能体不存在: ${agentId}`,
+                                timestamp: new Date().toISOString(),
+                            };
+                            res.status(404).json(apiError);
+                            return;
+                        }
+                        const baseUrl = agent.endpoint.replace('/api/v1/chat/completions', '');
+                        const url = `${baseUrl}/api/core/chat/feedback/updateUserFeedback`;
+                        const payload = {
+                            appId: agent.appId || agent.id,
+                            chatId,
+                            dataId,
+                            ...(userGoodFeedback ? { userGoodFeedback } : {}),
+                            ...(userBadFeedback ? { userBadFeedback } : {}),
+                        };
+                        const headers = {
+                            Authorization: `Bearer ${agent.apiKey}`,
+                            'Content-Type': 'application/json'
+                        };
+                        const resp = await axios_1.default.post(url, payload, { headers });
+                        if (resp.data?.code !== 200) {
+                            throw new Error(resp.data?.message || '反馈失败');
+                        }
+                        res.json({ success: true, data: null, timestamp: new Date().toISOString() });
+                    }
+                    catch (err) {
+                        console.error('提交点赞/点踩反馈失败:', err);
+                        const apiError = {
+                            code: 'FEEDBACK_FAILED',
+                            message: err instanceof Error ? err.message : '反馈失败',
+                            timestamp: new Date().toISOString(),
+                        };
+                        res.status(500).json(apiError);
+                    }
+                };
             });
         }
         catch (error) {

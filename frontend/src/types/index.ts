@@ -27,6 +27,8 @@ export type InteractiveData =
 export interface ChatMessage {
   AI?: string;    // AI回复内容
   HUMAN?: string; // 用户输入内容
+  id?: string;    // 响应数据ID（FastGPT responseChatItemId，用于点赞/点踩反馈）
+  feedback?: 'good' | 'bad' | null; // 点赞/点踩的持久化状态（good=点赞，bad=点踩，null=无）
   interactive?: InteractiveData; // FastGPT 交互节点（流式 detail=true）
 }
 

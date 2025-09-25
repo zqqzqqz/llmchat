@@ -6,6 +6,7 @@ export declare class ChatController {
     constructor();
     private chatInitSchema;
     private chatRequestSchema;
+    private feedbackSchema;
     chatCompletions: (req: Request, res: Response, next: NextFunction) => Promise<void>;
     private handleNormalRequest;
     private handleStreamRequest;
@@ -13,6 +14,7 @@ export declare class ChatController {
     chatInit: (req: Request, res: Response, next: NextFunction) => Promise<void>;
     private handleInitNormalRequest;
     private handleInitStreamRequest;
+    updateUserFeedback: (req: Request, res: Response, next: NextFunction) => Promise<void>;
     getChatHistory: (req: Request, res: Response, next: NextFunction) => Promise<void>;
 }
 //# sourceMappingURL=ChatController.d.ts.map

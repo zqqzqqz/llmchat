@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { Dialog } from '@/components/ui/Dialog';
 import {
   MessageSquare,
   Plus,
@@ -30,6 +31,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => {
     deleteSession,
     switchToSession,
     renameSession,
+    clearCurrentAgentSessions,
   } = useChatStore();
 
   // huihua.md 要求：根据当前智能体id从localStorage获取会话列表并显示
@@ -41,6 +43,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => {
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
   const [touchStartY, setTouchStartY] = useState<number | null>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
+
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   const handleStartEdit = (session: ChatSession) => {
     setEditingId(session.id);
@@ -76,11 +80,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => {
 
   const handleTouchMove = (e: React.TouchEvent) => {
     if (!touchStartX || !touchStartY) return;
-    
+
     const touch = e.touches[0];
     const diffX = touchStartX - touch.clientX;
     const diffY = Math.abs(touchStartY - touch.clientY);
-    
+
     // 水平滑动距离大于垂直滑动距离，且向左滑动超过50px
     if (diffX > 50 && diffY < 100) {
       setSidebarOpen(false);
@@ -135,10 +139,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => {
     older: filteredSessions.filter(s => !isThisWeek(s.updatedAt))
   };
 
-  const SessionGroup: React.FC<{ title: string; sessions: ChatSession[]; icon?: React.ReactNode }> = ({ 
-    title, 
-    sessions: groupSessions, 
-    icon 
+  const SessionGroup: React.FC<{ title: string; sessions: ChatSession[]; icon?: React.ReactNode }> = ({
+    title,
+    sessions: groupSessions,
+    icon
   }) => {
     if (groupSessions.length === 0) return null;
 
@@ -163,7 +167,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => {
               }}
             >
               <MessageSquare className="h-4 w-4 flex-shrink-0" />
-              
+
               {editingId === session.id ? (
                 <div className="flex-1 flex items-center gap-2">
                   <input
@@ -268,6 +272,25 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => {
             <Plus className="h-5 w-5" />
             新建对话
           </Button>
+
+          <div className="mt-2">
+            <Button
+              onClick={() => {
+                if (!currentAgent) return;
+                if (sessionsToDisplay.length === 0) return;
+                setShowClearConfirm(true);
+              }}
+              variant="destructive"
+              size="md"
+              radius="lg"
+              className="w-full flex items-center gap-3"
+              disabled={!currentAgent || sessionsToDisplay.length === 0}
+              title={!currentAgent ? '请选择智能体' : (sessionsToDisplay.length === 0 ? '暂无可清空的对话' : '清空当前智能体的所有对话')}
+            >
+              <Trash2 className="h-4 w-4" />
+              清空对话
+            </Button>
+          </div>
         </div>
 
         {/* 搜索 */}
@@ -294,23 +317,23 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => {
             </div>
           ) : (
             <div>
-              <SessionGroup 
-                title="今天" 
+              <SessionGroup
+                title="今天"
                 sessions={groupedSessions.today}
                 icon={<Clock className="h-3 w-3" />}
               />
-              <SessionGroup 
-                title="昨天" 
+              <SessionGroup
+                title="昨天"
                 sessions={groupedSessions.yesterday}
                 icon={<Clock className="h-3 w-3" />}
               />
-              <SessionGroup 
-                title="本周" 
+              <SessionGroup
+                title="本周"
                 sessions={groupedSessions.thisWeek}
                 icon={<Calendar className="h-3 w-3" />}
               />
-              <SessionGroup 
-                title="更早" 
+              <SessionGroup
+                title="更早"
                 sessions={groupedSessions.older}
                 icon={<Calendar className="h-3 w-3" />}
               />
@@ -318,6 +341,22 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => {
           )}
         </div>
       </aside>
+
+      {/* 清空对话确认弹窗（全局层级） */}
+      <Dialog
+        open={showClearConfirm}
+        title="清空对话"
+        description="确定要清空当前智能体的所有对话吗？该操作不可撤销。"
+        confirmText="清空"
+        cancelText="取消"
+        destructive
+        onClose={() => setShowClearConfirm(false)}
+        onConfirm={() => {
+          clearCurrentAgentSessions();
+          setShowClearConfirm(false);
+        }}
+      />
+
     </>
   );
 };
