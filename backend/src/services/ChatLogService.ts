@@ -1,5 +1,7 @@
 import fs from 'fs';
 import path from 'path';
+import { withClient } from '@/utils/db';
+
 
 interface NormalLogEntry {
   timestamp: string;
@@ -107,7 +109,7 @@ export class ChatLogService {
     return path.join(this.logDir, file);
   }
 
-  private append(entry: object) {
+  private appendFile(entry: object) {
     if (!this.enabled) return;
     this.ensureDir();
     const line = JSON.stringify(entry) + '\n';
@@ -117,6 +119,16 @@ export class ChatLogService {
       });
     } catch (e) {
       console.warn('[ChatLogService] 追加日志异常:', e);
+    }
+  }
+
+  private async appendDb(level: 'INFO'|'WARN'|'ERROR', message: string) {
+    try {
+      await withClient(async (client) => {
+        await client.query('INSERT INTO logs(level, message) VALUES ($1, $2)', [level, message]);
+      });
+    } catch (e) {
+      console.warn('[ChatLogService] 数据库写入失败:', e);
     }
   }
 
@@ -139,7 +151,8 @@ export class ChatLogService {
       rawResponse: this.includeRaw ? params.rawResponse : undefined,
       normalizedResponse: this.includeNormalized ? params.normalizedResponse : undefined,
     };
-    this.append(entry);
+    this.appendFile(entry);
+    this.appendDb('INFO', JSON.stringify(entry));
   }
 
   logStreamEvent(params: {
@@ -161,7 +174,8 @@ export class ChatLogService {
       eventType: params.eventType,
       data: params.data,
     };
-    this.append(entry);
+    this.appendFile(entry);
+    { const level: 'INFO'|'WARN'|'ERROR' = params.eventType === 'error' ? 'ERROR' : 'INFO'; this.appendDb(level, JSON.stringify(entry)); }
   }
 }
 

@@ -6,9 +6,13 @@ import dotenv from 'dotenv';
 
 import { agentRoutes } from '@/routes/agents';
 import { chatRoutes } from '@/routes/chat';
+import { authRoutes } from '@/routes/auth';
+import { adminRoutes } from '@/routes/admin';
 import { errorHandler } from '@/middleware/errorHandler';
 import { requestLogger } from '@/middleware/requestLogger';
 import { rateLimiter } from '@/middleware/rateLimiter';
+
+import { initDB, closeDB } from '@/utils/db';
 
 // 加载环境变量
 dotenv.config();
@@ -30,8 +34,8 @@ app.use(helmet({
 }));
 
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production' 
-    ? process.env.FRONTEND_URL 
+  origin: process.env.NODE_ENV === 'production'
+    ? process.env.FRONTEND_URL
     : ['http://localhost:3000', 'http://127.0.0.1:3000'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -75,6 +79,8 @@ app.get('/health', (req, res) => {
 // API路由
 app.use('/api/agents', agentRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/admin', adminRoutes);
 
 // 404处理
 app.use('*', (req, res) => {
@@ -88,18 +94,27 @@ app.use('*', (req, res) => {
 // 错误处理中间件
 app.use(errorHandler);
 
-// 启动服务器
-const server = app.listen(PORT, () => {
-  console.log(`🚀 LLMChat后端服务启动成功`);
-  console.log(`📡 服务地址: http://localhost:${PORT}`);
-  console.log(`🌍 环境: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`⏰ 启动时间: ${new Date().toLocaleString()}`);
-});
+// 启动服务器（先初始化数据库）
+let server: import('http').Server;
+initDB()
+  .then(() => {
+    server = app.listen(PORT, () => {
+      console.log(`🚀 LLMChat后端服务启动成功`);
+      console.log(`📡 服务地址: http://localhost:${PORT}`);
+      console.log(`🌍 环境: ${process.env.NODE_ENV || 'development'}`);
+      console.log(`⏰ 启动时间: ${new Date().toLocaleString()}`);
+    });
+  })
+  .catch((err) => {
+    console.error('数据库初始化失败:', err);
+    process.exit(1);
+  });
 
 // 优雅关闭
 process.on('SIGTERM', () => {
   console.log('收到SIGTERM信号，开始优雅关闭...');
-  server.close(() => {
+  server?.close(async () => {
+    await closeDB().catch(() => void 0);
     console.log('服务器已关闭');
     process.exit(0);
   });
@@ -107,7 +122,8 @@ process.on('SIGTERM', () => {
 
 process.on('SIGINT', () => {
   console.log('收到SIGINT信号，开始优雅关闭...');
-  server.close(() => {
+  server?.close(async () => {
+    await closeDB().catch(() => void 0);
     console.log('服务器已关闭');
     process.exit(0);
   });

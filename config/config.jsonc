@@ -16,5 +16,24 @@
       "normalized": true
     }
   }
+  ,
+  "database": {
+    // 后台管理改用 PostgreSQL；不再从 auth.defaultAccounts 读取登录账号
+    "postgres": {
+      "host": "171.43.138.237",
+      "port": 5433,
+      "user": "username",
+      "password": "password",
+      "database": "llmchat",
+      "ssl": false
+    }
+  }
+
+,
+  "auth": {
+    // token 有效期（秒），默认 24h
+    "tokenTTLSeconds": 86400
+  }
+
 }
 

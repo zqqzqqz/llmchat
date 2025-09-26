@@ -1,7 +1,9 @@
 import axios from 'axios';
+import { useAuthStore } from '@/store/authStore';
+import { toast } from '@/components/ui/Toast';
 import { Agent, OriginalChatMessage, ChatOptions, ChatResponse } from '@/types';
 
-const api = axios.create({
+export const api = axios.create({
   baseURL: '/api',
   timeout: 30000,
   headers: {
@@ -9,13 +11,33 @@ const api = axios.create({
   },
 });
 
-// 响应拦截器：处理错误响应
+// 请求拦截器：自动附加 Authorization
+api.interceptors.request.use((config) => {
+  const token = useAuthStore.getState().token;
+  if (token) {
+    config.headers = config.headers || {};
+    (config.headers as any)['Authorization'] = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// 响应拦截器：处理错误响应与 401 统一登出
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     console.error('API请求错误:', error);
-    // 如果是网络错误或超时，提供友好的错误信息
-    if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+    const status = error?.response?.status;
+    if (status === 401) {
+      // 统一登出并跳转登录
+      const { logout } = useAuthStore.getState();
+      logout();
+      toast({ type: 'warning', title: '登录状态已过期，请重新登录' });
+      const target = window.location.pathname + (window.location.search || '');
+      window.location.assign(`/login?redirect=${encodeURIComponent(target)}`);
+      return Promise.reject(error);
+    }
+    // 网络错误与超时提示
+    if (error.code === 'ECONNABORTED' || (typeof error.message === 'string' && error.message.includes('timeout'))) {
       error.message = '请求超时，请检查网络连接';
     } else if (error.code === 'ERR_NETWORK') {
       error.message = '网络连接失败，请检查后端服务是否启动';
@@ -79,11 +101,13 @@ export const chatService = {
   ): Promise<void> {
     console.log('发送流式消息请求:', { agentId, messageCount: messages.length, options });
 
+    const authToken = useAuthStore.getState().token;
     const response = await fetch('/api/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'text/event-stream',
+        ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {}),
       },
       body: JSON.stringify({
         agentId,
@@ -99,6 +123,14 @@ export const chatService = {
     });
 
     if (!response.ok) {
+      if (response.status === 401) {
+        const { logout } = useAuthStore.getState();
+        logout();
+        toast({ type: 'warning', title: '登录状态已过期，请重新登录' });
+        const target = window.location.pathname + (window.location.search || '');
+        window.location.assign(`/login?redirect=${encodeURIComponent(target)}`);
+        return;
+      }
       const errorText = await response.text();
       console.error('Stream request failed:', response.status, errorText);
       throw new Error(`Stream request failed: ${response.status} ${errorText}`);
@@ -239,14 +271,24 @@ export const chatService = {
     const search = new URLSearchParams({ appId: agentId, stream: 'true' });
     if (chatId) search.set('chatId', chatId);
 
+    const authToken = useAuthStore.getState().token;
     const response = await fetch(`/api/chat/init?${search.toString()}`, {
       method: 'GET',
       headers: {
         'Accept': 'text/event-stream',
+        ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {}),
       },
     });
 
     if (!response.ok) {
+      if (response.status === 401) {
+        const { logout } = useAuthStore.getState();
+        logout();
+        toast({ type: 'warning', title: '登录状态已过期，请重新登录' });
+        const target = window.location.pathname + (window.location.search || '');
+        window.location.assign(`/login?redirect=${encodeURIComponent(target)}`);
+        return;
+      }
       const errorText = await response.text();
       console.error('Init stream request failed:', response.status, errorText);
       throw new Error(`Init stream request failed: ${response.status} ${errorText}`);

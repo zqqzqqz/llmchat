@@ -25,4 +25,9 @@ router.get('/:id/status', agentController.getAgentStatus);
 // GET /api/agents/:id/validate
 router.get('/:id/validate', agentController.validateAgent);
 
+// 更新智能体配置（启用/禁用、编辑）
+// POST /api/agents/:id/update
+router.post('/:id/update', agentController.updateAgent);
+
+
 export { router as agentRoutes };

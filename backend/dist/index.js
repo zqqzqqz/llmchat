@@ -10,9 +10,12 @@ const compression_1 = __importDefault(require("compression"));
 const dotenv_1 = __importDefault(require("dotenv"));
 const agents_1 = require("@/routes/agents");
 const chat_1 = require("@/routes/chat");
+const auth_1 = require("@/routes/auth");
+const admin_1 = require("@/routes/admin");
 const errorHandler_1 = require("@/middleware/errorHandler");
 const requestLogger_1 = require("@/middleware/requestLogger");
 const rateLimiter_1 = require("@/middleware/rateLimiter");
+const db_1 = require("@/utils/db");
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 3001;
@@ -61,6 +64,8 @@ app.get('/health', (req, res) => {
 });
 app.use('/api/agents', agents_1.agentRoutes);
 app.use('/api/chat', chat_1.chatRoutes);
+app.use('/api/auth', auth_1.authRoutes);
+app.use('/api/admin', admin_1.adminRoutes);
 app.use('*', (req, res) => {
     res.status(404).json({
         code: 'NOT_FOUND',
@@ -69,22 +74,32 @@ app.use('*', (req, res) => {
     });
 });
 app.use(errorHandler_1.errorHandler);
-const server = app.listen(PORT, () => {
-    console.log(`🚀 LLMChat后端服务启动成功`);
-    console.log(`📡 服务地址: http://localhost:${PORT}`);
-    console.log(`🌍 环境: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`⏰ 启动时间: ${new Date().toLocaleString()}`);
+let server;
+(0, db_1.initDB)()
+    .then(() => {
+    server = app.listen(PORT, () => {
+        console.log(`🚀 LLMChat后端服务启动成功`);
+        console.log(`📡 服务地址: http://localhost:${PORT}`);
+        console.log(`🌍 环境: ${process.env.NODE_ENV || 'development'}`);
+        console.log(`⏰ 启动时间: ${new Date().toLocaleString()}`);
+    });
+})
+    .catch((err) => {
+    console.error('数据库初始化失败:', err);
+    process.exit(1);
 });
 process.on('SIGTERM', () => {
     console.log('收到SIGTERM信号，开始优雅关闭...');
-    server.close(() => {
+    server?.close(async () => {
+        await (0, db_1.closeDB)().catch(() => void 0);
         console.log('服务器已关闭');
         process.exit(0);
     });
 });
 process.on('SIGINT', () => {
     console.log('收到SIGINT信号，开始优雅关闭...');
-    server.close(() => {
+    server?.close(async () => {
+        await (0, db_1.closeDB)().catch(() => void 0);
         console.log('服务器已关闭');
         process.exit(0);
     });

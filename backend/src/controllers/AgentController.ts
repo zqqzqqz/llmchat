@@ -2,6 +2,15 @@ import { Request, Response, NextFunction } from 'express';
 import { AgentConfigService } from '@/services/AgentConfigService';
 import { ChatProxyService } from '@/services/ChatProxyService';
 import { ApiError } from '@/types';
+import { authService } from '@/services/authInstance';
+async function ensureAdminAuth(req: Request) {
+  const auth = req.headers['authorization'];
+  const token = (auth || '').replace(/^Bearer\s+/i, '').trim();
+  if (!token) throw new Error('UNAUTHORIZED');
+  const user = await authService.profile(token);
+  if (!user || user.role !== 'admin') throw new Error('UNAUTHORIZED');
+  return user;
+}
 
 /**
  * 智能体控制器
@@ -22,8 +31,8 @@ export class AgentController {
   getAgents = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const includeInactive = req.query.includeInactive === 'true';
-      
-      const agents = includeInactive 
+
+      const agents = includeInactive
         ? await this.agentService.getAllAgents()
         : await this.agentService.getAvailableAgents();
 
@@ -40,11 +49,11 @@ export class AgentController {
         message: '获取智能体列表失败',
         timestamp: new Date().toISOString(),
       };
-      
+
       if (process.env.NODE_ENV === 'development') {
         apiError.details = { error: error instanceof Error ? error.message : error };
       }
-      
+
       res.status(500).json(apiError);
     }
   };
@@ -56,7 +65,7 @@ export class AgentController {
   getAgent = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { id } = req.params;
-      
+
       if (!id) {
         const apiError: ApiError = {
           code: 'INVALID_AGENT_ID',
@@ -68,7 +77,7 @@ export class AgentController {
       }
 
       const config = await this.agentService.getAgent(id);
-      
+
       if (!config) {
         const apiError: ApiError = {
           code: 'AGENT_NOT_FOUND',
@@ -111,11 +120,11 @@ export class AgentController {
         message: '获取智能体信息失败',
         timestamp: new Date().toISOString(),
       };
-      
+
       if (process.env.NODE_ENV === 'development') {
         apiError.details = { error: error instanceof Error ? error.message : error };
       }
-      
+
       res.status(500).json(apiError);
     }
   };
@@ -127,7 +136,7 @@ export class AgentController {
   getAgentStatus = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { id } = req.params;
-      
+
       if (!id) {
         const apiError: ApiError = {
           code: 'INVALID_AGENT_ID',
@@ -152,11 +161,11 @@ export class AgentController {
         message: '检查智能体状态失败',
         timestamp: new Date().toISOString(),
       };
-      
+
       if (process.env.NODE_ENV === 'development') {
         apiError.details = { error: error instanceof Error ? error.message : error };
       }
-      
+
       res.status(500).json(apiError);
     }
   };
@@ -168,7 +177,7 @@ export class AgentController {
   reloadAgents = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const configs = await this.agentService.reloadAgents();
-      
+
       res.json({
         success: true,
         message: '智能体配置已重新加载',
@@ -185,11 +194,11 @@ export class AgentController {
         message: '重新加载智能体配置失败',
         timestamp: new Date().toISOString(),
       };
-      
+
       if (process.env.NODE_ENV === 'development') {
         apiError.details = { error: error instanceof Error ? error.message : error };
       }
-      
+
       res.status(500).json(apiError);
     }
   };
@@ -201,7 +210,7 @@ export class AgentController {
   validateAgent = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { id } = req.params;
-      
+
       if (!id) {
         const apiError: ApiError = {
           code: 'INVALID_AGENT_ID',
@@ -227,17 +236,45 @@ export class AgentController {
       });
     } catch (error) {
       console.error('验证智能体配置失败:', error);
+
       const apiError: ApiError = {
         code: 'VALIDATE_AGENT_FAILED',
         message: '验证智能体配置失败',
         timestamp: new Date().toISOString(),
       };
-      
+
       if (process.env.NODE_ENV === 'development') {
         apiError.details = { error: error instanceof Error ? error.message : error };
       }
-      
+
       res.status(500).json(apiError);
     }
   };
+
+  /**
+   * 更新智能体配置（启用/禁用、编辑）
+   * POST /api/agents/:id/update
+   */
+  updateAgent = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      await ensureAdminAuth(req);
+      const { id } = req.params;
+      if (!id) {
+        res.status(400).json({ code: 'INVALID_AGENT_ID', message: '智能体ID不能为空', timestamp: new Date().toISOString() });
+        return;
+      }
+      const updatesRaw = req.body || {};
+      // 白名单过滤，避免覆盖敏感字段
+      const allowedKeys = new Set(['name','description','model','isActive','systemPrompt','temperature','maxTokens']);
+      const updates: any = {};
+      Object.keys(updatesRaw || {}).forEach((k) => { if (allowedKeys.has(k)) (updates as any)[k] = (updatesRaw as any)[k]; });
+      await this.agentService.updateAgent(id, updates);
+      const latest = await this.agentService.getAgent(id);
+      res.json({ success: true, data: latest, timestamp: new Date().toISOString() });
+    } catch (error) {
+      console.error('更新智能体失败:', error);
+      res.status(500).json({ code: 'UPDATE_AGENT_FAILED', message: '更新智能体失败', timestamp: new Date().toISOString() });
+    }
+  };
+
 }
