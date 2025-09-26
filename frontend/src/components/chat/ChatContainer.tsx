@@ -263,7 +263,7 @@ export const ChatContainer: React.FC = () => {
   // 有消息时的正常聊天界面
   return (
     <div className="flex flex-col h-full bg-background">
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-hidden pt-[37px] sm:pt-0">
         <MessageList
             messages={messages}
             isStreaming={isStreaming}

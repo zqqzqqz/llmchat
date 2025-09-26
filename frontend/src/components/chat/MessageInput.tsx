@@ -113,10 +113,7 @@ export const MessageInput: React.FC<ChatInputProps> = ({
         </div>
       </form>
       
-      {/* 提示文本 */}
-      <div className="px-4 pb-3 text-xs text-muted-foreground text-center">
-        按 Enter 发送，Shift + Enter 换行
-      </div>
+      {/* 移除输入提示文案 */}
     </div>
   );
 };

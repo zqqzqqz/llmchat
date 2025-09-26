@@ -81,14 +81,7 @@ export const AgentSelector: React.FC = () => {
             <div className="truncate font-medium">
               {currentAgent?.name || '选择智能体'}
             </div>
-            {currentAgent && (
-              <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
-                {getStatusIcon(currentAgent.status)}
-                <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${getProviderColor(currentAgent.provider)}`}>
-                  {currentAgent.provider}
-                </span>
-              </div>
-            )}
+            {/* 移除 provider/model/wifi 显示，保持仅展示名称 */}
           </div>
         </div>
         <ChevronDown className={`h-4 w-4 flex-shrink-0 text-gray-400 transition-transform duration-200 ${
@@ -98,8 +91,8 @@ export const AgentSelector: React.FC = () => {
 
       {agentSelectorOpen && (
         <>
-          {/* 移动端全屏遵罩 */}
-          <div className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden" 
+          {/* 移动端全屏遮罩（透明以避免顶部黑色背景） */}
+          <div className="fixed inset-0 bg-transparent z-40 lg:hidden" 
             onClick={() => setAgentSelectorOpen(false)} />
           
           {/* 下拉菜单 */}
@@ -154,15 +147,7 @@ export const AgentSelector: React.FC = () => {
                           {agent.description}
                         </p>
                         
-                        <div className="flex items-center gap-2 text-xs">
-                          {getStatusIcon(agent.status)}
-                          <span className={`px-2 py-1 rounded-full font-medium ${getProviderColor(agent.provider)}`}>
-                            {agent.provider}
-                          </span>
-                          <span className="text-gray-500 dark:text-gray-400">
-                            {agent.model}
-                          </span>
-                        </div>
+                        {/* 移除 provider/model/wifi 显示，保留描述与能力标签 */}
                         
                         {/* 能力标签 */}
                         {agent.capabilities && agent.capabilities.length > 0 && (

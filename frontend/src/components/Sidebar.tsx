@@ -244,7 +244,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => {
       {/* 移动端遮罩 */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
+          className="fixed inset-0 bg-transparent z-40 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
@@ -273,24 +273,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => {
             新建对话
           </Button>
 
-          <div className="mt-2">
-            <Button
-              onClick={() => {
-                if (!currentAgent) return;
-                if (sessionsToDisplay.length === 0) return;
-                setShowClearConfirm(true);
-              }}
-              variant="destructive"
-              size="md"
-              radius="lg"
-              className="w-full flex items-center gap-3"
-              disabled={!currentAgent || sessionsToDisplay.length === 0}
-              title={!currentAgent ? '请选择智能体' : (sessionsToDisplay.length === 0 ? '暂无可清空的对话' : '清空当前智能体的所有对话')}
-            >
-              <Trash2 className="h-4 w-4" />
-              清空对话
-            </Button>
-          </div>
+          {/* 隐藏清空对话按钮（业务要求不展示） */}
         </div>
 
         {/* 搜索 */}
@@ -342,20 +325,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => {
         </div>
       </aside>
 
-      {/* 清空对话确认弹窗（全局层级） */}
-      <Dialog
-        open={showClearConfirm}
-        title="清空对话"
-        description="确定要清空当前智能体的所有对话吗？该操作不可撤销。"
-        confirmText="清空"
-        cancelText="取消"
-        destructive
-        onClose={() => setShowClearConfirm(false)}
-        onConfirm={() => {
-          clearCurrentAgentSessions();
-          setShowClearConfirm(false);
-        }}
-      />
+      {/* 隐藏清空对话确认弹窗（不影响管理端） */}
 
     </>
   );
