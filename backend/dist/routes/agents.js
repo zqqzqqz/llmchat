@@ -11,4 +11,5 @@ router.post('/reload', agentController.reloadAgents);
 router.get('/:id', agentController.getAgent);
 router.get('/:id/status', agentController.getAgentStatus);
 router.get('/:id/validate', agentController.validateAgent);
+router.post('/:id/update', agentController.updateAgent);
 //# sourceMappingURL=agents.js.map

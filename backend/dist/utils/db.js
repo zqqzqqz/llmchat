@@ -48,6 +48,7 @@ async function initDB() {
         updated_at TIMESTAMPTZ DEFAULT NOW()
       );
     `);
+        await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_plain TEXT;`);
         await client.query(`
       CREATE TABLE IF NOT EXISTS logs (
         id SERIAL PRIMARY KEY,
@@ -59,8 +60,7 @@ async function initDB() {
         const { rows } = await client.query(`SELECT COUNT(*)::text AS count FROM users`);
         const count = parseInt(rows[0]?.count || '0', 10);
         if (count === 0) {
-            const { salt, hash } = hashPassword('admin123!');
-            await client.query(`INSERT INTO users(username, password_salt, password_hash, role, status) VALUES ($1,$2,$3,$4,$5)`, ['admin', salt, hash, 'admin', 'active']);
+            await client.query(`INSERT INTO users(username, password_salt, password_hash, password_plain, role, status) VALUES ($1,$2,$3,$4,$5,$6)`, ['admin', '', '', 'admin', 'admin', 'active']);
         }
     });
 }

@@ -8,7 +8,8 @@ export declare class ChatLogService {
     constructor();
     private ensureDir;
     private getLogFilePath;
-    private append;
+    private appendFile;
+    private appendDb;
     logCompletion(params: {
         agentId: string;
         provider: string;

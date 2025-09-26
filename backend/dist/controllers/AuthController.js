@@ -1,8 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AuthController = void 0;
-const AuthService_1 = require("@/services/AuthService");
-const authService = new AuthService_1.AuthService();
+const authInstance_1 = require("@/services/authInstance");
 class AuthController {
     static async login(req, res) {
         try {
@@ -14,7 +13,7 @@ class AuthController {
                     timestamp: new Date().toISOString(),
                 });
             }
-            const result = await authService.login(username, password);
+            const result = await authInstance_1.authService.login(username, password);
             return res.json(result);
         }
         catch (e) {
@@ -40,7 +39,7 @@ class AuthController {
             if (!token) {
                 return res.status(401).json({ code: 'UNAUTHORIZED', message: '缺少令牌', timestamp: new Date().toISOString() });
             }
-            const user = await authService.profile(token);
+            const user = await authInstance_1.authService.profile(token);
             return res.json({ user });
         }
         catch (e) {
@@ -57,7 +56,7 @@ class AuthController {
             const auth = req.headers['authorization'];
             const token = (auth || '').replace(/^Bearer\s+/i, '').trim();
             if (token)
-                await authService.logout(token);
+                await authInstance_1.authService.logout(token);
             return res.json({ ok: true });
         }
         catch (e) {
@@ -73,7 +72,7 @@ class AuthController {
             const { oldPassword, newPassword } = req.body || {};
             if (!oldPassword || !newPassword)
                 return res.status(400).json({ code: 'BAD_REQUEST', message: 'oldPassword/newPassword 必填', timestamp: new Date().toISOString() });
-            await authService.changePassword(token, oldPassword, newPassword);
+            await authInstance_1.authService.changePassword(token, oldPassword, newPassword);
             return res.json({ ok: true });
         }
         catch (e) {

@@ -22,14 +22,13 @@ class AuthService {
     }
     async login(username, password) {
         const dbUser = await (0, db_1.withClient)(async (client) => {
-            const { rows } = await client.query('SELECT id, username, password_salt, password_hash, role, status FROM users WHERE username=$1 LIMIT 1', [username]);
+            const { rows } = await client.query('SELECT id, username, password_plain, role, status FROM users WHERE username=$1 LIMIT 1', [username]);
             return rows[0];
         });
         if (!dbUser || (dbUser.status && dbUser.status !== 'active')) {
             throw new Error('INVALID_CREDENTIALS');
         }
-        const { hash } = (0, db_1.hashPassword)(password, dbUser.password_salt);
-        if (hash !== dbUser.password_hash) {
+        if (password !== (dbUser.password_plain || '')) {
             throw new Error('INVALID_CREDENTIALS');
         }
         const user = { id: String(dbUser.id), username: dbUser.username, role: dbUser.role || undefined };
@@ -59,17 +58,15 @@ class AuthService {
             throw new Error('UNAUTHORIZED');
         const username = record.user.username;
         const dbUser = await (0, db_1.withClient)(async (client) => {
-            const { rows } = await client.query('SELECT id, username, password_salt, password_hash FROM users WHERE username=$1 LIMIT 1', [username]);
+            const { rows } = await client.query('SELECT id, username, password_plain FROM users WHERE username=$1 LIMIT 1', [username]);
             return rows[0];
         });
         if (!dbUser)
             throw new Error('UNAUTHORIZED');
-        const { hash: oldHash } = (0, db_1.hashPassword)(oldPassword, dbUser.password_salt);
-        if (oldHash !== dbUser.password_hash)
+        if ((dbUser.password_plain || '') !== oldPassword)
             throw new Error('INVALID_OLD_PASSWORD');
-        const { salt, hash } = (0, db_1.hashPassword)(newPassword);
         await (0, db_1.withClient)(async (client) => {
-            await client.query('UPDATE users SET password_salt=$1, password_hash=$2, updated_at=NOW() WHERE username=$3', [salt, hash, username]);
+            await client.query('UPDATE users SET password_plain=$1, updated_at=NOW() WHERE username=$2', [newPassword, username]);
         });
     }
     async loadConfig() {

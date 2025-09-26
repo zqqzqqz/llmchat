@@ -8,5 +8,6 @@ export declare class AgentController {
     getAgentStatus: (req: Request, res: Response, next: NextFunction) => Promise<void>;
     reloadAgents: (req: Request, res: Response, next: NextFunction) => Promise<void>;
     validateAgent: (req: Request, res: Response, next: NextFunction) => Promise<void>;
+    updateAgent: (req: Request, res: Response, next: NextFunction) => Promise<void>;
 }
 //# sourceMappingURL=AgentController.d.ts.map

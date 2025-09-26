@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ChatLogService = void 0;
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
+const db_1 = require("@/utils/db");
 function stripComments(input) {
     const withoutBlock = input.replace(/\/\*[\s\S]*?\*\//g, '');
     return withoutBlock.replace(/(^|\s)\/\/.*$/gm, '');
@@ -61,7 +62,7 @@ class ChatLogService {
         const file = `chat-${y}${m}${d}.log`;
         return path_1.default.join(this.logDir, file);
     }
-    append(entry) {
+    appendFile(entry) {
         if (!this.enabled)
             return;
         this.ensureDir();
@@ -74,6 +75,16 @@ class ChatLogService {
         }
         catch (e) {
             console.warn('[ChatLogService] 追加日志异常:', e);
+        }
+    }
+    async appendDb(level, message) {
+        try {
+            await (0, db_1.withClient)(async (client) => {
+                await client.query('INSERT INTO logs(level, message) VALUES ($1, $2)', [level, message]);
+            });
+        }
+        catch (e) {
+            console.warn('[ChatLogService] 数据库写入失败:', e);
         }
     }
     logCompletion(params) {
@@ -89,7 +100,8 @@ class ChatLogService {
             rawResponse: this.includeRaw ? params.rawResponse : undefined,
             normalizedResponse: this.includeNormalized ? params.normalizedResponse : undefined,
         };
-        this.append(entry);
+        this.appendFile(entry);
+        this.appendDb('INFO', JSON.stringify(entry));
     }
     logStreamEvent(params) {
         if (!this.enabled || !this.recordStream)
@@ -104,7 +116,11 @@ class ChatLogService {
             eventType: params.eventType,
             data: params.data,
         };
-        this.append(entry);
+        this.appendFile(entry);
+        {
+            const level = params.eventType === 'error' ? 'ERROR' : 'INFO';
+            this.appendDb(level, JSON.stringify(entry));
+        }
     }
 }
 exports.ChatLogService = ChatLogService;

@@ -3,6 +3,17 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.AgentController = void 0;
 const AgentConfigService_1 = require("@/services/AgentConfigService");
 const ChatProxyService_1 = require("@/services/ChatProxyService");
+const authInstance_1 = require("@/services/authInstance");
+async function ensureAdminAuth(req) {
+    const auth = req.headers['authorization'];
+    const token = (auth || '').replace(/^Bearer\s+/i, '').trim();
+    if (!token)
+        throw new Error('UNAUTHORIZED');
+    const user = await authInstance_1.authService.profile(token);
+    if (!user || user.role !== 'admin')
+        throw new Error('UNAUTHORIZED');
+    return user;
+}
 class AgentController {
     constructor() {
         this.getAgents = async (req, res, next) => {
@@ -184,6 +195,28 @@ class AgentController {
                     apiError.details = { error: error instanceof Error ? error.message : error };
                 }
                 res.status(500).json(apiError);
+            }
+        };
+        this.updateAgent = async (req, res, next) => {
+            try {
+                await ensureAdminAuth(req);
+                const { id } = req.params;
+                if (!id) {
+                    res.status(400).json({ code: 'INVALID_AGENT_ID', message: '智能体ID不能为空', timestamp: new Date().toISOString() });
+                    return;
+                }
+                const updatesRaw = req.body || {};
+                const allowedKeys = new Set(['name', 'description', 'model', 'isActive', 'systemPrompt', 'temperature', 'maxTokens']);
+                const updates = {};
+                Object.keys(updatesRaw || {}).forEach((k) => { if (allowedKeys.has(k))
+                    updates[k] = updatesRaw[k]; });
+                await this.agentService.updateAgent(id, updates);
+                const latest = await this.agentService.getAgent(id);
+                res.json({ success: true, data: latest, timestamp: new Date().toISOString() });
+            }
+            catch (error) {
+                console.error('更新智能体失败:', error);
+                res.status(500).json({ code: 'UPDATE_AGENT_FAILED', message: '更新智能体失败', timestamp: new Date().toISOString() });
             }
         };
         this.agentService = new AgentConfigService_1.AgentConfigService();

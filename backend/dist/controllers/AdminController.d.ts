@@ -4,5 +4,8 @@ export declare class AdminController {
     static users(req: Request, res: Response): Promise<Response<any, Record<string, any>>>;
     static logs(req: Request, res: Response): Promise<Response<any, Record<string, any>>>;
     static logsExport(req: Request, res: Response): Promise<Response<any, Record<string, any>>>;
+    static createUser(req: Request, res: Response): Promise<Response<any, Record<string, any>>>;
+    static updateUser(req: Request, res: Response): Promise<Response<any, Record<string, any>>>;
+    static resetUserPassword(req: Request, res: Response): Promise<Response<any, Record<string, any>>>;
 }
 //# sourceMappingURL=AdminController.d.ts.map

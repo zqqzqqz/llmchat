@@ -2,10 +2,12 @@
 import { useState, useEffect } from "react";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import { motion, AnimatePresence } from "framer-motion";
-import { Menu, X, Home, Users, BarChart3, Settings, Sun, Moon, FileText, LogOut, User, Search } from "lucide-react";
+import { Menu, X, Home, Users, BarChart3, Settings, Sun, Moon, FileText, LogOut, User } from "lucide-react";
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+
+import ReactECharts from 'echarts-for-react';
 
 import { useAuthStore } from "@/store/authStore";
 import { logoutApi, changePasswordApi } from "@/services/authApi";
@@ -132,14 +134,6 @@ function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse, username, activ
           </Button>
         </div>
 
-        {!collapsed && (
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="mt-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input placeholder="搜索功能..." className="pl-10 h-9 rounded-lg bg-muted/30 border-border/30 focus:border-[var(--brand)]/50" />
-            </div>
-          </motion.div>
-        )}
       </div>
 
       <div className="flex-1 p-4 space-y-2">
@@ -200,7 +194,7 @@ function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse, username, activ
   );
 }
 
-function TopHeader({ onToggleSidebar, onToggleCollapse, sidebarCollapsed, username, onLogout, onChangePassword, title, breadcrumb }: { onToggleSidebar: () => void; onToggleCollapse: () => void; sidebarCollapsed: boolean; username: string; onLogout: () => void; onChangePassword: () => void; title: string; breadcrumb: Array<{ label: string; to?: string }>; }) {
+function TopHeader({ onToggleSidebar, onToggleCollapse: _onToggleCollapse, sidebarCollapsed, username: _username, onLogout: _onLogout, onChangePassword: _onChangePassword, title, breadcrumb }: { onToggleSidebar: () => void; onToggleCollapse: () => void; sidebarCollapsed: boolean; username: string; onLogout: () => void; onChangePassword: () => void; title: string; breadcrumb: Array<{ label: string; to?: string }>; }) {
   const { theme, toggleTheme } = useTheme();
   return (
     <motion.header initial={{ y: -50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className={`sticky top-0 z-30 h-16 bg-background/90 backdrop-blur-xl border-b border-border/50 shadow-sm transition-all duration-300 ${sidebarCollapsed ? "lg:ml-20" : "lg:ml-64"}`}>
@@ -235,30 +229,33 @@ function DashboardContent({ sidebarCollapsed }: { sidebarCollapsed: boolean }) {
   return (
     <main className={`transition-all duration-300 ${sidebarCollapsed ? "lg:ml-20" : "lg:ml-64"}`}>
       <div className="p-6">
-        <ServerStats />
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-stretch">
+          {/* 1/2 大图表：一个月内每天每个智能体对话数量 */}
+          {/* 顶部：对话数量折线图（近30天 · 按智能体/每天） */}
+          <div className="lg:col-span-4">
+            <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.1 }} className="p-6 rounded-2xl bg-background border border-border/50 shadow-sm">
+              <h3 className="text-lg font-semibold text-foreground mb-2">对话数量（近30天 · 按智能体/每天）</h3>
+              <p className="text-xs text-muted-foreground mb-4">使用 ECharts 折线图（示例数据），后续可对接真实接口</p>
+              <ConversationsLineChart />
+            </motion.div>
+          </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-6">
-            <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.4 }} className="p-6 rounded-2xl bg-background border border-border/50 shadow-sm">
-              <h3 className="text-lg font-semibold text-foreground mb-4">数据趋势</h3>
-              <div className="h-64 bg-muted/20 rounded-lg flex items-center justify-center">
-                <p className="text-muted-foreground">图表区域</p>
-              </div>
+          {/* 左下：点踩数据量 */}
+          <div className="lg:col-span-2">
+            <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.15 }} className="p-6 rounded-2xl bg-background border border-border/50 shadow-sm">
+              <h3 className="text-lg font-semibold text-foreground mb-2">点踩（近30天）</h3>
+              <DownvotesCard />
             </motion.div>
           </div>
-          <div className="space-y-6">
-            <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.5 }} className="p-6 rounded-2xl bg-background border border-border/50 shadow-sm">
-              <h3 className="text-lg font-semibold text-foreground mb-4">最近活动</h3>
-              <div className="space-y-3">
-                {["用户 张三 登录系统", "新增 5 条数据记录", "系统备份完成", "收到 3 条新消息"].map((activity, index) => (
-                  <div key={index} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/20">
-                    <div className="w-2 h-2 rounded-full bg-[var(--brand)]"></div>
-                    <span className="text-sm text-muted-foreground">{activity}</span>
-                  </div>
-                ))}
-              </div>
+
+          {/* 右下：服务器参数：内存/GPU/磁盘使用量 */}
+          <div className="lg:col-span-2">
+            <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.2 }} className="p-6 rounded-2xl bg-background border border-border/50 shadow-sm">
+              <h3 className="text-lg font-semibold text-foreground mb-2">服务器参数</h3>
+              <ServerParamsCard />
             </motion.div>
           </div>
+
         </div>
 
       </div>
@@ -268,44 +265,117 @@ function DashboardContent({ sidebarCollapsed }: { sidebarCollapsed: boolean }) {
 
 
 
-function ServerStats() {
+function DownvotesCard() {
+  // 占位：统计总量 + 迷你条形
+  const values = [2,4,3,6,5,8,7,6,5,4,6,7,5,4,3,5,6,4,3,2,1,2,3,2,4,3,5,4,3,2];
+  const total = values.reduce((a,b)=>a+b,0);
+  const max = Math.max(...values, 1);
+  return (
+    <div>
+      <div className="text-3xl font-bold text-foreground">{total}</div>
+      <div className="text-xs text-muted-foreground mb-3">近30天点踩次数</div>
+      <div className="h-16 flex items-end gap-1">
+        {values.map((v, i) => (
+          <div key={i} className="w-[6px] bg-red-500/50 rounded-t" style={{ height: `${(v / max) * 64}px` }} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ServerParamsCard() {
   const [info, setInfo] = useState<SystemInfo | null>(null);
   const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState<string | null>(null);
   useEffect(() => {
     (async () => {
       try {
         setLoading(true);
         const d = await getSystemInfo();
         setInfo(d);
-      } catch (e: any) {
-        setErr('加载服务器信息失败');
+      } catch {
       } finally {
         setLoading(false);
       }
     })();
   }, []);
-  if (loading) return <div className="mb-8 text-sm text-muted-foreground">正在加载服务器信息...</div>;
-  if (err) return <div className="mb-8 text-sm text-red-600">{err}</div>;
-  if (!info) return null;
-  const memPercent = info.memory.total ? Math.round((info.memory.used / info.memory.total) * 100) : 0;
-  const cards = [
-    { title: 'CPU 内核', value: String(info.cpu.count) },
-    { title: '系统运行时长', value: `${Math.floor(info.uptimeSec/3600)} 小时` },
-    { title: '内存使用', value: `${memPercent}%` },
-    { title: '进程 RSS', value: `${Math.round(info.memory.rss/1024/1024)} MB` },
-  ];
+  const memPercent = info?.memory?.total ? Math.round((info.memory.used / info.memory.total) * 100) : null;
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-      {cards.map((c, idx) => (
-        <motion.div key={c.title} initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: idx * 0.1 }} className="p-6 rounded-2xl bg-background border border-border/50 shadow-sm hover:shadow-md">
-          <div className="text-2xl font-bold text-foreground mb-1">{c.value}</div>
-          <div className="text-sm text-muted-foreground">{c.title}</div>
-        </motion.div>
-      ))}
+    <div className="space-y-3 text-sm">
+      {loading && <div className="text-muted-foreground">加载中...</div>}
+      {!loading && (
+        <>
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">内存使用</span>
+            <span className="font-medium">{memPercent !== null ? `${memPercent}%` : 'N/A'}</span>
+          </div>
+          <div className="h-2 w-full bg-muted/30 rounded">
+            <div className="h-2 bg-[var(--brand)]/60 rounded" style={{ width: `${memPercent ?? 0}%` }} />
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">GPU 使用</span>
+            <span className="font-medium">N/A</span>
+          </div>
+          <div className="h-2 w-full bg-muted/30 rounded">
+            <div className="h-2 bg-[var(--brand)]/40 rounded" style={{ width: `0%` }} />
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">磁盘使用</span>
+            <span className="font-medium">N/A</span>
+          </div>
+          <div className="h-2 w-full bg-muted/30 rounded">
+            <div className="h-2 bg-[var(--brand)]/40 rounded" style={{ width: `0%` }} />
+          </div>
+          <div className="text-xs text-muted-foreground">提示：GPU/磁盘暂未从后端提供，需扩展 /admin/system-info 接口</div>
+        </>
+      )}
     </div>
   );
 }
+
+function ConversationsLineChart() {
+  // 生成近30天日期
+  const dates = Array.from({ length: 30 }, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - (29 - i));
+    return `${d.getMonth()+1}/${d.getDate()}`;
+  });
+  // 模拟 3 个智能体数据
+  const agents = ["FastGPT", "OpenAI", "Anthropic"];
+  const series = agents.map((name, idx) => ({
+    name,
+    type: 'line',
+    smooth: true,
+    symbol: 'circle',
+    symbolSize: 6,
+    lineStyle: { width: 2 },
+    data: dates.map((_, di) => 10 + ((di * (idx+1)) % 8) + (idx*3)),
+  }));
+  const option = {
+    tooltip: { trigger: 'axis' },
+    grid: { left: 40, right: 20, top: 30, bottom: 30 },
+    legend: { data: agents, top: 0, textStyle: { color: 'var(--muted-foreground)' } },
+    xAxis: {
+      type: 'category',
+      boundaryGap: false,
+      data: dates,
+      axisLine: { lineStyle: { color: 'var(--border)' } },
+      axisLabel: { color: 'var(--muted-foreground)' },
+      axisTick: { show: false },
+    },
+    yAxis: {
+      type: 'value',
+      axisLine: { show: false },
+      splitLine: { lineStyle: { color: 'rgba(125,125,125,0.2)' } },
+      axisLabel: { color: 'var(--muted-foreground)' },
+    },
+    series,
+  } as const;
+  return <ReactECharts option={option} style={{ height: 320 }} notMerge={true} lazyUpdate={true} />;
+}
+
+
+
+
 
 function LogsPanel() {
   const [logs, setLogs] = useState<LogItem[]>([]);
@@ -315,7 +385,7 @@ function LogsPanel() {
   const [start, setStart] = useState<string>('');
   const [end, setEnd] = useState<string>('');
   const [page, setPage] = useState<number>(1);
-  const [pageSize, setPageSize] = useState<number>(20);
+  const pageSize = 20;
   const [total, setTotal] = useState<number>(0);
 
   const fetchData = async (p = page) => {
@@ -332,7 +402,7 @@ function LogsPanel() {
     }
   };
 
-  useEffect(() => { fetchData(1); setPage(1); }, [level, start, end, pageSize]);
+  useEffect(() => { fetchData(1); setPage(1); }, [level, start, end]);
 
   const onExport = async () => {
     try {
@@ -367,7 +437,7 @@ function LogsPanel() {
               <label className="block text-xs text-muted-foreground mb-1">结束时间</label>
               <input type="datetime-local" value={end} onChange={e=>setEnd(e.target.value)} className="h-9 px-2 rounded-md bg-muted/30 border border-border/30" />
             </div>
-            <Button onClick={fetchData}>查询</Button>
+            <Button onClick={() => fetchData()}>查询</Button>
             <Button variant="secondary" onClick={onExport}>导出 CSV</Button>
           </div>
 
