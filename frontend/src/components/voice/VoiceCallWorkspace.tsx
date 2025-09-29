@@ -70,6 +70,10 @@ export const VoiceCallWorkspace: React.FC<VoiceCallWorkspaceProps> = ({ agent })
     streamingStatus,
     clearMessages,
     createNewSession,
+    currentAgent,
+    currentSession,
+    updateSession,
+    renameSession,
   } = useChatStore();
   const { sendMessage } = useChat();
 
@@ -230,12 +234,33 @@ export const VoiceCallWorkspace: React.FC<VoiceCallWorkspaceProps> = ({ agent })
       try {
         await sendMessage(content, { detail: true });
         setLastUtterance(content);
+
+        const store = useChatStore.getState();
+        const activeSession = store.currentSession;
+        if (activeSession && activeSession.agentId === agent.id) {
+          const metadata = activeSession.metadata || {};
+          if (metadata.type === 'voice-call' && !metadata.firstUtterance) {
+            const summary = content.length > 30 ? `${content.slice(0, 30)}...` : content;
+            if (summary) {
+              renameSession(activeSession.id, summary);
+            }
+            updateSession(agent.id, activeSession.id, (session) => ({
+              ...session,
+              metadata: {
+                ...(session.metadata || {}),
+                type: 'voice-call',
+                firstUtterance: content,
+              },
+              updatedAt: new Date(),
+            }));
+          }
+        }
       } catch (err) {
         console.error('发送语音消息失败', err);
         setError('发送语音消息失败，请稍后重试。');
       }
     },
-    [sendMessage]
+    [agent.id, renameSession, sendMessage, updateSession]
   );
 
   const handleStartCall = useCallback(async () => {
@@ -343,6 +368,24 @@ export const VoiceCallWorkspace: React.FC<VoiceCallWorkspaceProps> = ({ agent })
       clearMessages();
       createNewSession();
 
+      const createdSession = useChatStore.getState().currentSession;
+      const startedAt = new Date();
+      if (createdSession && createdSession.agentId === agent.id) {
+        renameSession(
+          createdSession.id,
+          `语音通话 ${startedAt.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`
+        );
+        updateSession(agent.id, createdSession.id, (session) => ({
+          ...session,
+          metadata: {
+            ...(session.metadata || {}),
+            type: 'voice-call',
+            startedAt: startedAt.toISOString(),
+          },
+          updatedAt: startedAt,
+        }));
+      }
+
       setCallStatus('in-call');
       callStatusRef.current = 'in-call';
     } catch (err) {
@@ -352,14 +395,50 @@ export const VoiceCallWorkspace: React.FC<VoiceCallWorkspaceProps> = ({ agent })
       setCallStatus('idle');
       callStatusRef.current = 'idle';
     }
-  }, [callStatus, clearMessages, createNewSession, cleanupAudio, handleSendRecognizedText, registerFinalUtterance]);
+  }, [
+    agent.id,
+    callStatus,
+    clearMessages,
+    createNewSession,
+    cleanupAudio,
+    handleSendRecognizedText,
+    registerFinalUtterance,
+    renameSession,
+    updateSession,
+  ]);
 
   const handleStopCall = useCallback(() => {
     if (callStatus === 'idle') return;
     setCallStatus('ended');
     callStatusRef.current = 'ended';
+    const endedAt = new Date();
+    const durationMs = callStartRef.current ? Date.now() - callStartRef.current : callDuration;
+    if (currentAgent?.id === agent.id && currentSession) {
+      updateSession(agent.id, currentSession.id, (session) => ({
+        ...session,
+        metadata: {
+          ...(session.metadata || {}),
+          type: 'voice-call',
+          startedAt: session.metadata?.startedAt || (callStartRef.current ? new Date(callStartRef.current).toISOString() : undefined),
+          endedAt: endedAt.toISOString(),
+          durationMs,
+          lastUtterance,
+          finalUtterances: [...finalUtterancesRef.current],
+        },
+        updatedAt: endedAt,
+      }));
+    }
     cleanupAudio();
-  }, [callStatus, cleanupAudio]);
+  }, [
+    agent.id,
+    callDuration,
+    callStatus,
+    cleanupAudio,
+    currentAgent?.id,
+    currentSession,
+    lastUtterance,
+    updateSession,
+  ]);
 
   const statusLabel: Record<CallStatus, string> = {
     idle: '等待开始',

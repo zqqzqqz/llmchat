@@ -621,6 +621,28 @@ export class ChatController {
       }
 
       const { agentId, page, pageSize } = value as { agentId: string; page?: number; pageSize?: number };
+
+      const agent = await this.agentService.getAgent(agentId);
+      if (!agent) {
+        const apiError: ApiError = {
+          code: 'AGENT_NOT_FOUND',
+          message: `智能体不存在: ${agentId}`,
+          timestamp: new Date().toISOString(),
+        };
+        res.status(404).json(apiError);
+        return;
+      }
+
+      if (agent.provider !== 'fastgpt') {
+        const apiError: ApiError = {
+          code: 'INVALID_PROVIDER',
+          message: `智能体 ${agentId} 不支持远程会话历史查询`,
+          timestamp: new Date().toISOString(),
+        };
+        res.status(400).json(apiError);
+        return;
+      }
+
       const pagination: { page?: number; pageSize?: number } = {};
       if (typeof page === 'number') {
         pagination.page = page;
@@ -702,6 +724,28 @@ export class ChatController {
       }
 
       const { agentId } = value as { agentId: string };
+
+      const agent = await this.agentService.getAgent(agentId);
+      if (!agent) {
+        const apiError: ApiError = {
+          code: 'AGENT_NOT_FOUND',
+          message: `智能体不存在: ${agentId}`,
+          timestamp: new Date().toISOString(),
+        };
+        res.status(404).json(apiError);
+        return;
+      }
+
+      if (agent.provider !== 'fastgpt') {
+        const apiError: ApiError = {
+          code: 'INVALID_PROVIDER',
+          message: `智能体 ${agentId} 不支持远程会话历史查询`,
+          timestamp: new Date().toISOString(),
+        };
+        res.status(400).json(apiError);
+        return;
+      }
+
       const detail: FastGPTChatHistoryDetail = await this.fastgptSessionService.getHistoryDetail(agentId, chatId);
 
       res.json({

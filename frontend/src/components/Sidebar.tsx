@@ -272,7 +272,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => {
                       {formatTime(session.updatedAt)}
                     </div>
                   </div>
-                  <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity">
+                  <div
+                    className={`flex items-center gap-1 transition-opacity ${
+                      currentSession?.id === session.id || editingId === session.id
+                        ? 'opacity-100'
+                        : 'opacity-0 group-hover:opacity-100'
+                    }`}
+                  >
                     <IconButton
                       onClick={(e) => {
                         e.stopPropagation();
