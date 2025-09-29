@@ -1,11 +1,13 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Camera, Upload, Sparkles, RefreshCcw, Loader2 } from 'lucide-react';
-import { Agent } from '@/types';
+import { Agent, ChatMessage } from '@/types';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { cn } from '@/lib/utils';
 import { toast } from '@/components/ui/Toast';
 import { productPreviewService } from '@/services/api';
+import { useChatStore } from '@/store/chatStore';
+import { PRODUCT_PREVIEW_AGENT_ID } from '@/constants/agents';
 
 interface ProductPreviewWorkspaceProps {
   agent: Agent;
@@ -19,6 +21,8 @@ interface BoundingBox {
 }
 
 type ResizeDirection = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+
+const PRODUCT_PREVIEW_SESSION_TYPE = 'product-preview';
 
 const RESIZE_HANDLE_POSITION: Record<ResizeDirection, string> = {
   'top-left': 'left-[-0.5rem] top-[-0.5rem] cursor-nwse-resize',
@@ -70,6 +74,14 @@ export const ProductPreviewWorkspace: React.FC<ProductPreviewWorkspaceProps> = (
   const [submitting, setSubmitting] = useState(false);
   const [generatedImage, setGeneratedImage] = useState<string>('');
   const [interaction, setInteraction] = useState<InteractionState>({ type: 'idle' });
+
+  const {
+    currentAgent,
+    currentSession,
+    createNewSession,
+    deleteSession,
+    updateSession,
+  } = useChatStore();
 
   const resetBoundingBox = useCallback(() => {
     setBoundingBox(null);
@@ -247,6 +259,40 @@ export const ProductPreviewWorkspace: React.FC<ProductPreviewWorkspaceProps> = (
 
   const isCreating = interaction.type === 'creating';
 
+  useEffect(() => {
+    if (!currentSession || currentAgent?.id !== agent.id) {
+      return;
+    }
+
+    const metadata = currentSession.metadata;
+    if (!metadata || metadata.type !== PRODUCT_PREVIEW_SESSION_TYPE) {
+      return;
+    }
+
+    const request = metadata.request || {};
+    const response = metadata.response || {};
+
+    if (typeof request.productQuery === 'string') {
+      setProductQuery(request.productQuery);
+    }
+    if (typeof request.personalization === 'string') {
+      setPersonalization(request.personalization);
+    }
+    if (typeof request.sceneImage === 'string') {
+      setSceneImagePreview(request.sceneImage);
+    }
+    if (typeof request.productImage === 'string') {
+      setProductImagePreview(request.productImage);
+    }
+    if (request.boundingBox) {
+      setBoundingBox(request.boundingBox as BoundingBox);
+    }
+    const imageFromResponse = response.generatedImage || response.imageUrl || metadata.generatedImage;
+    if (typeof imageFromResponse === 'string') {
+      setGeneratedImage(imageFromResponse);
+    }
+  }, [agent.id, currentAgent?.id, currentSession]);
+
   const handleSubmit = useCallback(async () => {
     if (!sceneImagePreview || !boundingBox) {
       toast({ type: 'warning', title: '请先上传现场照片并标记红框' });
@@ -257,8 +303,22 @@ export const ProductPreviewWorkspace: React.FC<ProductPreviewWorkspaceProps> = (
       return;
     }
 
+    if (currentAgent?.id !== PRODUCT_PREVIEW_AGENT_ID) {
+      toast({ type: 'error', title: '当前智能体不是产品现场预览' });
+      return;
+    }
+
+    let sessionId: string | null = null;
     try {
       setSubmitting(true);
+      createNewSession();
+      const latestSession = useChatStore.getState().currentSession;
+      if (!latestSession || latestSession.agentId !== currentAgent.id) {
+        toast({ type: 'error', title: '创建会话失败，请重试' });
+        return;
+      }
+
+      sessionId = latestSession.id;
       const payload = {
         sceneImage: sceneImagePreview,
         productImage: productImagePreview || undefined,
@@ -274,14 +334,69 @@ export const ProductPreviewWorkspace: React.FC<ProductPreviewWorkspaceProps> = (
       } else {
         toast({ type: 'info', title: '请求已提交', description: '阿里图片生成接口已接收请求，请稍后刷新查看结果。' });
       }
+
+      const now = new Date();
+      const sessionTitle = productQuery.trim() || `现场预览 ${now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`;
+      const metadata = {
+        type: PRODUCT_PREVIEW_SESSION_TYPE,
+        request: {
+          sceneImage: sceneImagePreview,
+          productImage: productImagePreview || '',
+          productQuery: productQuery.trim(),
+          personalization: personalization.trim(),
+          boundingBox,
+        },
+        response: {
+          generatedImage: resultImage || null,
+          imageUrl: response?.imageUrl || null,
+          previewImage: response?.previewImage || null,
+          raw: response?.raw || response,
+          status: response?.status || (resultImage ? 'completed' : 'submitted'),
+        },
+        timestamps: {
+          submittedAt: now.toISOString(),
+        },
+      };
+
+      const sessionMessages: ChatMessage[] = [
+        {
+          HUMAN: `现场预览请求：${productQuery.trim()}${personalization.trim() ? `，要求：${personalization.trim()}` : ''}`,
+        },
+        {
+          AI: resultImage
+            ? '预览图已生成，可在右侧查看效果。'
+            : '请求已提交至图片生成接口，请稍后刷新查看结果。',
+        },
+      ];
+
+      updateSession(currentAgent.id, sessionId, (session) => ({
+        ...session,
+        title: sessionTitle,
+        metadata,
+        messages: sessionMessages,
+        updatedAt: now,
+      }));
     } catch (error: any) {
       console.error('生成现场预览失败', error);
       const message = error?.response?.data?.message || error?.message || '生成现场预览失败，请稍后重试';
       toast({ type: 'error', title: '生成失败', description: message });
+      if (sessionId) {
+        deleteSession(sessionId);
+      }
     } finally {
       setSubmitting(false);
     }
-  }, [boundingBox, personalization, productImagePreview, productQuery, sceneImagePreview]);
+  }, [
+    createNewSession,
+    boundingBox,
+    currentAgent?.id,
+    deleteSession,
+    personalization,
+    productImagePreview,
+    productQuery,
+    sceneImagePreview,
+    updateSession,
+  ]);
 
   return (
     <div className="flex-1 overflow-y-auto">

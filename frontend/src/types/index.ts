@@ -93,6 +93,7 @@ export interface ChatMessage {
   interactive?: InteractiveData; // FastGPT 交互节点（流式 detail=true）
   reasoning?: ReasoningState;    // 思维链信息
   events?: FastGPTEvent[];       // FastGPT 扩展事件
+  metadata?: Record<string, any>; // 额外元数据（产品预览、语音通话等扩展使用）
 }
 
 /**
@@ -205,6 +206,7 @@ export interface ChatSession {
   messages: ChatMessage[]; // 消息列表 [{'AI': string, 'HUMAN': string}]
   createdAt: Date;         // 创建时间
   updatedAt: Date;         // 更新时间
+  metadata?: Record<string, any>; // 会话扩展信息（例如产品预览参数、语音通话统计）
 }
 
 /**

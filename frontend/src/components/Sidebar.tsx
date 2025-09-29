@@ -16,6 +16,7 @@ import { useChatStore } from '@/store/chatStore';
 import { ChatSession } from '@/types';
 import { chatService } from '@/services/api';
 import { mapHistorySummaryToSession, mapHistoryDetailToMessages } from '@/lib/fastgpt';
+import { PRODUCT_PREVIEW_AGENT_ID, VOICE_CALL_AGENT_ID } from '@/constants/agents';
 
 interface SidebarProps {
   className?: string;
@@ -48,6 +49,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => {
 
   useEffect(() => {
     if (!currentAgent) return;
+    if (currentAgent.id === PRODUCT_PREVIEW_AGENT_ID || currentAgent.id === VOICE_CALL_AGENT_ID) {
+      return;
+    }
 
     let cancelled = false;
 
@@ -86,10 +90,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => {
   };
 
   const handleSwitchSession = async (session: ChatSession) => {
-    switchToSession(session.id);
+      switchToSession(session.id);
 
-    if (!currentAgent) return;
-    if (session.messages && session.messages.length > 0) return;
+      if (!currentAgent) return;
+      if (currentAgent.id === PRODUCT_PREVIEW_AGENT_ID || currentAgent.id === VOICE_CALL_AGENT_ID) return;
+      if (session.messages && session.messages.length > 0) return;
 
     try {
       const detail = await chatService.getHistoryDetail(currentAgent.id, session.id);
@@ -117,6 +122,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => {
     e.stopPropagation();
     if (!currentAgent) return;
     if (!confirm('确定要删除这个对话吗？')) return;
+
+    if (currentAgent.id === PRODUCT_PREVIEW_AGENT_ID || currentAgent.id === VOICE_CALL_AGENT_ID) {
+      deleteSession(sessionId);
+      return;
+    }
 
     try {
       await chatService.deleteHistory(currentAgent.id, sessionId);
