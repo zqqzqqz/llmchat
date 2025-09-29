@@ -1,5 +1,4 @@
-import React, { useState, useRef } from 'react';
-import { Dialog } from '@/components/ui/Dialog';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   MessageSquare,
   Plus,
@@ -15,6 +14,8 @@ import { Button } from '@/components/ui/Button';
 import { IconButton } from '@/components/ui/IconButton';
 import { useChatStore } from '@/store/chatStore';
 import { ChatSession } from '@/types';
+import { chatService } from '@/services/api';
+import { mapHistorySummaryToSession, mapHistoryDetailToMessages } from '@/lib/fastgpt';
 
 interface SidebarProps {
   className?: string;
@@ -31,7 +32,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => {
     deleteSession,
     switchToSession,
     renameSession,
-    clearCurrentAgentSessions,
+    setAgentSessionsForAgent,
+    setSessionMessages,
   } = useChatStore();
 
   // huihua.md 要求：根据当前智能体id从localStorage获取会话列表并显示
@@ -44,11 +46,58 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => {
   const [touchStartY, setTouchStartY] = useState<number | null>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
 
-  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  useEffect(() => {
+    if (!currentAgent) return;
+
+    let cancelled = false;
+
+    const loadHistories = async () => {
+      try {
+        const summaries = await chatService.listHistories(currentAgent.id);
+        if (cancelled) return;
+        const mapped = summaries.map((summary) => mapHistorySummaryToSession(currentAgent.id, summary));
+        setAgentSessionsForAgent(currentAgent.id, mapped);
+        if (mapped.length > 0) {
+          try {
+            const detail = await chatService.getHistoryDetail(currentAgent.id, mapped[0].id);
+            if (!cancelled) {
+              const messages = mapHistoryDetailToMessages(detail);
+              setSessionMessages(mapped[0].id, messages);
+            }
+          } catch (detailError) {
+            console.error('加载默认会话详情失败:', detailError);
+          }
+        }
+      } catch (error) {
+        console.error('加载聊天历史失败:', error);
+      }
+    };
+
+    loadHistories();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentAgent?.id, setAgentSessionsForAgent, setSessionMessages]);
 
   const handleStartEdit = (session: ChatSession) => {
     setEditingId(session.id);
     setEditTitle(session.title);
+  };
+
+  const handleSwitchSession = async (session: ChatSession) => {
+    switchToSession(session.id);
+
+    if (!currentAgent) return;
+    if (session.messages && session.messages.length > 0) return;
+
+    try {
+      const detail = await chatService.getHistoryDetail(currentAgent.id, session.id);
+      const mapped = mapHistoryDetailToMessages(detail);
+      setSessionMessages(session.id, mapped);
+    } catch (error) {
+      console.error('加载聊天历史详情失败:', error);
+    }
   };
 
   const handleSaveEdit = () => {
@@ -64,10 +113,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => {
     setEditTitle('');
   };
 
-  const handleDeleteSession = (sessionId: string, e: React.MouseEvent) => {
+  const handleDeleteSession = async (sessionId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (confirm('确定要删除这个对话吗？')) {
+    if (!currentAgent) return;
+    if (!confirm('确定要删除这个对话吗？')) return;
+
+    try {
+      await chatService.deleteHistory(currentAgent.id, sessionId);
       deleteSession(sessionId);
+    } catch (error) {
+      console.error('删除聊天历史失败:', error);
     }
   };
 
@@ -161,10 +216,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => {
                   ? 'bg-brand/10 text-foreground'
                   : 'hover:bg-brand/10 text-foreground'
               }`}
-              onClick={() => {
-                // huihua.md 要求：点击会话标题显示该会话的详细内容（messages列表）
-                switchToSession(session.id);
-              }}
+              onClick={() => handleSwitchSession(session)}
             >
               <MessageSquare className="h-4 w-4 flex-shrink-0" />
 

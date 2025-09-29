@@ -14,7 +14,21 @@
     "include": {
       "raw": true,
       "normalized": true
-    }
+    },
+    // 导出到可观测平台（可选）
+    "exporters": [
+      {
+        "type": "elasticsearch",
+        "endpoint": "https://your-es-endpoint", // Elasticsearch/_bulk 地址
+        "index": "fastgpt-events",
+        "batchSize": 50,
+        "flushIntervalMs": 2000
+      },
+      {
+        "type": "http",
+        "endpoint": "https://observer.internal/api/logs"
+      }
+    ]
   }
   ,
   "database": {

@@ -1,6 +1,7 @@
 import axios, { AxiosInstance } from 'axios';
 import { AgentConfigService } from './AgentConfigService';
 import { AgentConfig, FastGPTInitResponse } from '@/types';
+import { AdaptiveTtlPolicy } from '@/utils/adaptiveCache';
 
 /**
  * 聊天初始化服务
@@ -9,8 +10,15 @@ import { AgentConfig, FastGPTInitResponse } from '@/types';
 export class ChatInitService {
   private httpClient: AxiosInstance;
   private agentService: AgentConfigService;
-  private cache: Map<string, { data: FastGPTInitResponse; timestamp: number }> = new Map();
-  private readonly CACHE_TTL = 5 * 60 * 1000; // 5分钟缓存
+  private cache: Map<string, { data: FastGPTInitResponse; expiresAt: number }> = new Map();
+  private readonly cachePolicy = new AdaptiveTtlPolicy({
+    initialTtl: 5 * 60 * 1000,
+    minTtl: 60 * 1000,
+    maxTtl: 15 * 60 * 1000,
+    step: 60 * 1000,
+    sampleSize: 20,
+    adjustIntervalMs: 2 * 60 * 1000,
+  });
 
   constructor(agentService: AgentConfigService) {
     this.agentService = agentService;
@@ -29,10 +37,14 @@ export class ChatInitService {
     // 检查缓存
     const cacheKey = `${appId}_${chatId || 'default'}`;
     const cached = this.cache.get(cacheKey);
-    if (cached && Date.now() - cached.timestamp < this.CACHE_TTL) {
+    const now = Date.now();
+    if (cached && cached.expiresAt > now) {
       console.log('✅ 使用缓存的初始化数据');
+      this.cachePolicy.recordHit();
       return cached.data;
     }
+
+    this.cachePolicy.recordMiss();
 
     // 获取智能体配置（此处的 appId 实际是前端传入的智能体ID）
     const agent = await this.agentService.getAgent(appId);
@@ -55,7 +67,7 @@ export class ChatInitService {
     // 缓存结果
     this.cache.set(cacheKey, {
       data: initData,
-      timestamp: Date.now()
+      expiresAt: Date.now() + this.cachePolicy.getTtl(),
     });
 
     return initData;
@@ -186,6 +198,7 @@ export class ChatInitService {
    */
   clearCache(): void {
     this.cache.clear();
+    this.cachePolicy.reset();
     console.log('🧹 初始化数据缓存已清除');
   }
 
@@ -195,7 +208,7 @@ export class ChatInitService {
   clearExpiredCache(): void {
     const now = Date.now();
     for (const [key, value] of this.cache.entries()) {
-      if (now - value.timestamp > this.CACHE_TTL) {
+      if (value.expiresAt <= now) {
         this.cache.delete(key);
       }
     }

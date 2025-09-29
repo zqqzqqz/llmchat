@@ -24,12 +24,73 @@ export type InteractiveData =
   | { type: 'userSelect'; params: { description?: string; userSelectOptions: { key: string; value: string }[] } }
   | { type: 'userInput'; params: { description?: string; inputForm: any[] } };
 
+export interface ReasoningStep {
+  id: string;
+  order: number;
+  content: string;
+  title?: string;
+  raw?: any;
+}
+
+export interface ReasoningState {
+  steps: ReasoningStep[];
+  totalSteps?: number;
+  finished?: boolean;
+  lastUpdatedAt?: number;
+}
+
+export interface ReasoningStepUpdate {
+  content: string;
+  order?: number;
+  totalSteps?: number;
+  title?: string;
+  raw?: any;
+  finished?: boolean;
+}
+
+export interface FastGPTEvent {
+  id: string;
+  name: string;
+  label: string;
+  summary?: string;
+  detail?: string;
+  level: 'info' | 'success' | 'warning' | 'error';
+  payload: any;
+  timestamp: number;
+}
+
+export interface ProductPreviewBoundingBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface ProductPreviewRequest {
+  sceneImage: string;
+  productImage?: string;
+  productQuery: string;
+  personalization?: string;
+  boundingBox: ProductPreviewBoundingBox;
+}
+
+export interface ProductPreviewResponse {
+  requestId?: string;
+  traceId?: string;
+  previewImage?: string;
+  imageUrl?: string;
+  raw?: any;
+  status?: string;
+}
+
 export interface ChatMessage {
   AI?: string;    // AI回复内容
   HUMAN?: string; // 用户输入内容
   id?: string;    // 响应数据ID（FastGPT responseChatItemId，用于点赞/点踩反馈）
   feedback?: 'good' | 'bad' | null; // 点赞/点踩的持久化状态（good=点赞，bad=点踩，null=无）
   interactive?: InteractiveData; // FastGPT 交互节点（流式 detail=true）
+  reasoning?: ReasoningState;    // 思维链信息
+  events?: FastGPTEvent[];       // FastGPT 扩展事件
 }
 
 /**
@@ -142,6 +203,43 @@ export interface ChatSession {
   messages: ChatMessage[]; // 消息列表 [{'AI': string, 'HUMAN': string}]
   createdAt: Date;         // 创建时间
   updatedAt: Date;         // 更新时间
+}
+
+/**
+ * FastGPT 会话摘要（前端使用）
+ */
+export interface FastGPTChatHistorySummary {
+  chatId: string;
+  appId?: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  messageCount?: number;
+  tags?: string[];
+  raw?: any;
+}
+
+/**
+ * FastGPT 历史消息（前端使用）
+ */
+export interface FastGPTChatHistoryMessage {
+  id?: string;
+  dataId?: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  feedback?: 'good' | 'bad' | null;
+  raw?: any;
+}
+
+/**
+ * FastGPT 会话详情（前端使用）
+ */
+export interface FastGPTChatHistoryDetail {
+  chatId: string;
+  appId?: string;
+  title?: string;
+  messages: FastGPTChatHistoryMessage[];
+  metadata?: Record<string, any>;
 }
 
 /**

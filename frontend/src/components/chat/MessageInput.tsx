@@ -3,6 +3,7 @@ import { Send, Paperclip, Mic, Square } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { IconButton } from '@/components/ui/IconButton';
 import { ChatInputProps } from '@/types';
+import { debugLog } from '@/lib/debug';
 
 export const MessageInput: React.FC<ChatInputProps> = ({
   onSendMessage,
@@ -39,7 +40,7 @@ export const MessageInput: React.FC<ChatInputProps> = ({
 
   const handleFileUpload = () => {
     // TODO: 实现文件上传功能
-    console.log('文件上传功能待实现');
+    debugLog('文件上传功能待实现');
   };
 
   const handleVoiceRecord = () => {
