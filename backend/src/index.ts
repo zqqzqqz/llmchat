@@ -8,6 +8,7 @@ import { agentRoutes } from '@/routes/agents';
 import { chatRoutes } from '@/routes/chat';
 import { authRoutes } from '@/routes/auth';
 import { adminRoutes } from '@/routes/admin';
+import { productPreviewRoutes } from '@/routes/productPreview';
 import { errorHandler } from '@/middleware/errorHandler';
 import { requestLogger } from '@/middleware/requestLogger';
 import { rateLimiter } from '@/middleware/rateLimiter';
@@ -81,6 +82,7 @@ app.use('/api/agents', agentRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/product-preview', productPreviewRoutes);
 
 // 404处理
 app.use('*', (req, res) => {

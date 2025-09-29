@@ -8,6 +8,11 @@
 - 后端：Node.js + Express + TypeScript
 - 其它：ESLint、Jest、ts-node-dev、tsconfig-paths、rate-limiter-flexible、helmet、compression、cors、dotenv
 
+## 内置智能体工作台
+
+- **产品现场预览**：引导用户上传现场与产品素材、勾勒红框并调用阿里图像生成 API，输出沉浸式的场景合成图。
+- **电话语音对话**：借助浏览器语音识别与播报能力，提供贴近 Kimi、豆包、通义千问电话助手体验的实时语音通话模式。
+
 ## 目录结构
 
 ```
@@ -64,6 +69,11 @@ llmchat/
      RATE_LIMIT_POINTS=100
      RATE_LIMIT_DURATION=60
      RATE_LIMIT_BLOCK_DURATION=60
+     ALIYUN_IMAGE_API_URL=https://dashscope.aliyuncs.com/api/v1/services/aigc/image-generation/generation
+     ALIYUN_IMAGE_API_KEY=your-dashscope-api-key
+     ALIYUN_IMAGE_MODEL=wanx-stylepro-v1
+     # 可选：如需指定工作空间
+     # ALIYUN_WORKSPACE_ID=your-workspace-id
      ```
    - 生产环境中 `FRONTEND_URL` 必须设置为实际前端地址（如 https://yourdomain）。
 
@@ -128,8 +138,15 @@ llmchat/
 - 聊天代理（`/api/chat`）
   - `POST /api/chat/completions` 发送聊天请求（支持流式/非流式）
   - `GET /api/chat/init` 聊天初始化
-  - `GET /api/chat/history/:sessionId` 获取聊天历史
+  - `GET /api/chat/history` 获取 FastGPT 会话列表
+  - `GET /api/chat/history/:chatId` 获取会话详情
+  - `DELETE /api/chat/history/:chatId` 删除会话历史
+  - `DELETE /api/chat/history` 清空当前智能体的会话历史
+  - `POST /api/chat/history/:chatId/retry` 重新生成指定消息
   - `POST /api/chat/feedback` 点赞/点踩反馈
+
+- 产品现场预览（`/api/product-preview`）
+  - `POST /api/product-preview/generate` 上传现场照片、产品素材与红框区域，调用阿里图片生成接口返回现场合成图
 
 - 认证（`/api/auth`）
   - `POST /api/auth/login` 登录

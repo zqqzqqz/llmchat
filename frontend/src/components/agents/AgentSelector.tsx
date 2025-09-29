@@ -1,8 +1,9 @@
 import React, { useEffect, useRef } from 'react';
-import { ChevronDown, Bot, Wifi, WifiOff } from 'lucide-react';
+import { ChevronDown, Bot, Camera, PhoneCall } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useChatStore } from '@/store/chatStore';
 import { useAgents } from '@/hooks/useAgents';
+import { PRODUCT_PREVIEW_AGENT_ID, VOICE_CALL_AGENT_ID } from '@/constants/agents';
 
 export const AgentSelector: React.FC = () => {
   const { 
@@ -39,30 +40,14 @@ export const AgentSelector: React.FC = () => {
     setAgentSelectorOpen(false);
   };
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'active':
-        return <Wifi className="h-3 w-3 text-green-500" />;
-      case 'inactive':
-        return <WifiOff className="h-3 w-3 text-gray-400" />;
-      case 'error':
-        return <WifiOff className="h-3 w-3 text-red-500" />;
-      default:
-        return <div className="h-3 w-3 bg-gray-400 rounded-full animate-pulse" />;
+  const renderAgentIcon = (agentId?: string) => {
+    if (agentId === PRODUCT_PREVIEW_AGENT_ID) {
+      return <Camera className="h-4 w-4 flex-shrink-0 text-brand drop-shadow-sm" />;
     }
-  };
-
-  const getProviderColor = (provider: string) => {
-    switch (provider) {
-      case 'fastgpt':
-        return 'text-purple-600 bg-purple-100 dark:text-purple-400 dark:bg-purple-900/20';
-      case 'openai':
-        return 'text-green-600 bg-green-100 dark:text-green-400 dark:bg-green-900/20';
-      case 'anthropic':
-        return 'text-orange-600 bg-orange-100 dark:text-orange-400 dark:bg-orange-900/20';
-      default:
-        return 'text-gray-600 bg-gray-100 dark:text-gray-400 dark:bg-gray-900/20';
+    if (agentId === VOICE_CALL_AGENT_ID) {
+      return <PhoneCall className="h-4 w-4 flex-shrink-0 text-brand drop-shadow-sm" />;
     }
+    return <Bot className="h-4 w-4 flex-shrink-0 text-brand drop-shadow-sm" />;
   };
 
   return (
@@ -76,7 +61,7 @@ export const AgentSelector: React.FC = () => {
         disabled={loading}
       >
         <div className="flex items-center gap-2 min-w-0 flex-1">
-          <Bot className="h-4 w-4 flex-shrink-0 text-brand drop-shadow-sm" />
+          {renderAgentIcon(currentAgent?.id)}
           <div className="min-w-0 flex-1">
             <div className="truncate font-medium">
               {currentAgent?.name || '选择智能体'}
@@ -130,7 +115,13 @@ export const AgentSelector: React.FC = () => {
                       }`}
                     >
                       <div className="w-8 h-8 rounded-full bg-gradient-to-br from-brand/25 to-brand/10 flex items-center justify-center flex-shrink-0 shadow-inner">
-                        <Bot className="h-4 w-4 text-white" />
+                        {agent.id === PRODUCT_PREVIEW_AGENT_ID ? (
+                          <Camera className="h-4 w-4 text-white" />
+                        ) : agent.id === VOICE_CALL_AGENT_ID ? (
+                          <PhoneCall className="h-4 w-4 text-white" />
+                        ) : (
+                          <Bot className="h-4 w-4 text-white" />
+                        )}
                       </div>
                       
                       <div className="flex-1 min-w-0">

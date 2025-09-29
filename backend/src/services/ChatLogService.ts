@@ -1,7 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import { withClient } from '@/utils/db';
-
+import { loadAppConfig } from '@/utils/appConfig';
+import { ObservabilityDispatcher } from '@/services/ObservabilityDispatcher';
 
 interface NormalLogEntry {
   timestamp: string;
@@ -25,41 +26,6 @@ interface StreamLogEntry {
   data: any;
 }
 
-type AppConfig = {
-  logging?: {
-    enabled?: boolean;
-    dir?: string;
-    record?: { normal?: boolean; stream?: boolean };
-    include?: { raw?: boolean; normalized?: boolean };
-  };
-};
-
-function stripComments(input: string): string {
-  // 去除 /* */ 与 // 注释
-  const withoutBlock = input.replace(/\/\*[\s\S]*?\*\//g, '');
-  return withoutBlock.replace(/(^|\s)\/\/.*$/gm, '');
-}
-
-function tryLoadAppConfig(): AppConfig {
-  const root = path.resolve(__dirname, '../../..');
-  const candidates = [
-    path.join(root, 'config', 'config.jsonc'),
-    path.join(root, 'config', 'config.json'),
-  ];
-  for (const p of candidates) {
-    try {
-      if (fs.existsSync(p)) {
-        const raw = fs.readFileSync(p, 'utf-8');
-        const json = JSON.parse(stripComments(raw));
-        return json as AppConfig;
-      }
-    } catch (e) {
-      console.warn('[ChatLogService] 解析配置失败:', p, e);
-    }
-  }
-  return {};
-}
-
 export class ChatLogService {
   private enabled: boolean;
   private logDir: string;
@@ -67,9 +33,10 @@ export class ChatLogService {
   private recordStream: boolean;
   private includeRaw: boolean;
   private includeNormalized: boolean;
+  private observability = ObservabilityDispatcher.getInstance();
 
   constructor() {
-    const cfg = tryLoadAppConfig();
+    const cfg = loadAppConfig();
     const cfgLog = cfg.logging || {};
 
     // 默认开启，允许通过配置文件/环境变量关闭
@@ -153,6 +120,17 @@ export class ChatLogService {
     };
     this.appendFile(entry);
     this.appendDb('INFO', JSON.stringify(entry));
+    this.pushObservability('normal', 'INFO', {
+      agentId: params.agentId,
+      provider: params.provider,
+      endpoint: params.endpoint,
+      payload: {
+        requestMeta: params.requestMeta,
+        rawResponse: this.includeRaw ? params.rawResponse ?? null : null,
+        normalizedResponse: this.includeNormalized ? params.normalizedResponse ?? null : null,
+      },
+      timestamp: entry.timestamp,
+    });
   }
 
   logStreamEvent(params: {
@@ -175,7 +153,69 @@ export class ChatLogService {
       data: params.data,
     };
     this.appendFile(entry);
-    { const level: 'INFO'|'WARN'|'ERROR' = params.eventType === 'error' ? 'ERROR' : 'INFO'; this.appendDb(level, JSON.stringify(entry)); }
+    {
+      const level: 'INFO' | 'WARN' | 'ERROR' =
+        params.eventType === 'error' ? 'ERROR' : 'INFO';
+      this.appendDb(level, JSON.stringify(entry));
+      const obsPayload: {
+        agentId: string;
+        payload: any;
+        timestamp: string;
+        provider?: string;
+        endpoint?: string;
+        chatId?: string;
+        eventType?: string;
+      } = {
+        agentId: params.agentId,
+        payload: params.data ?? null,
+        timestamp: entry.timestamp,
+      };
+      if (params.provider) obsPayload.provider = params.provider;
+      if (params.endpoint) obsPayload.endpoint = params.endpoint;
+      if (params.chatId) obsPayload.chatId = params.chatId;
+      if (params.eventType) obsPayload.eventType = params.eventType;
+      this.pushObservability('stream', level, obsPayload);
+    }
+  }
+
+  private pushObservability(
+    channel: 'normal' | 'stream',
+    level: 'INFO' | 'WARN' | 'ERROR',
+    payload: {
+      agentId: string;
+      provider?: string;
+      endpoint?: string;
+      chatId?: string;
+      eventType?: string;
+      payload: any;
+      timestamp: string;
+    }
+  ) {
+    try {
+      if (!this.observability.isEnabled()) return;
+      const event: import('./ObservabilityDispatcher').ObservabilityEvent = {
+        timestamp: payload.timestamp,
+        channel,
+        level,
+        agentId: payload.agentId,
+        payload: payload.payload ?? null,
+      };
+      if (payload.provider) {
+        event.provider = payload.provider;
+      }
+      if (payload.endpoint) {
+        event.endpoint = payload.endpoint;
+      }
+      if (payload.chatId) {
+        event.chatId = payload.chatId;
+      }
+      if (payload.eventType) {
+        event.eventType = payload.eventType;
+      }
+      this.observability.enqueue(event);
+    } catch (error) {
+      console.warn('[ChatLogService] 推送观测事件失败:', error);
+    }
   }
 }
 

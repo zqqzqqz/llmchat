@@ -10,6 +10,26 @@ import {
 import { AgentConfigService } from './AgentConfigService';
 import { generateId, generateTimestamp, getErrorMessage } from '@/utils/helpers';
 import { ChatLogService } from './ChatLogService';
+import {
+  getNormalizedEventKey,
+  isChatIdEvent,
+  isChunkLikeEvent,
+  isDatasetEvent,
+  isEndEvent,
+  isInteractiveEvent,
+  isReasoningEvent,
+  isStatusEvent,
+  isSummaryEvent,
+  isToolEvent,
+  isUsageEvent,
+} from '@/utils/fastgptEvents';
+
+interface SSEParsedEvent {
+  event: string;
+  data: string;
+  id?: string;
+  retry?: number;
+}
 
 /**
  * AI提供商适配器接口
@@ -402,8 +422,216 @@ export class ChatProxyService {
     }
   }
 
+  private findNextEventBoundary(buffer: string): { index: number; length: number } | null {
+    const lfIndex = buffer.indexOf('\n\n');
+    const crlfIndex = buffer.indexOf('\r\n\r\n');
+
+    if (lfIndex === -1 && crlfIndex === -1) {
+      return null;
+    }
+
+    if (lfIndex === -1) {
+      return { index: crlfIndex, length: 4 };
+    }
+
+    if (crlfIndex === -1) {
+      return { index: lfIndex, length: 2 };
+    }
+
+    return crlfIndex < lfIndex
+      ? { index: crlfIndex, length: 4 }
+      : { index: lfIndex, length: 2 };
+  }
+
+  private parseSSEEventBlock(rawBlock: string): SSEParsedEvent | null {
+    const lines = rawBlock.split(/\r?\n/);
+    let event = '';
+    const dataLines: string[] = [];
+    let id: string | undefined;
+    let retry: number | undefined;
+
+    for (const line of lines) {
+      if (!line || line.startsWith(':')) {
+        continue;
+      }
+
+      const separatorIndex = line.indexOf(':');
+      const field = separatorIndex === -1 ? line : line.slice(0, separatorIndex);
+      let value = separatorIndex === -1 ? '' : line.slice(separatorIndex + 1);
+      if (value.startsWith(' ')) {
+        value = value.slice(1);
+      }
+
+      switch (field) {
+        case 'event':
+          event = value.trim();
+          break;
+        case 'data':
+          dataLines.push(value);
+          break;
+        case 'id':
+          id = value.trim();
+          break;
+        case 'retry': {
+          const parsedRetry = parseInt(value, 10);
+          if (!Number.isNaN(parsedRetry)) {
+            retry = parsedRetry;
+          }
+          break;
+        }
+        default:
+          break;
+      }
+    }
+
+    const data = dataLines.join('\n');
+    if (!event && !data) {
+      return null;
+    }
+
+    const result: SSEParsedEvent = { event, data };
+    if (typeof id === 'string') {
+      result.id = id;
+    }
+    if (typeof retry === 'number') {
+      result.retry = retry;
+    }
+
+    return result;
+  }
+
+  private logStreamEvent(
+    ctx: { agentId: string; chatId?: string; endpoint: string; provider: string } | undefined,
+    eventType: string,
+    data: any
+  ): void {
+    try {
+      this.chatLog.logStreamEvent({
+        agentId: ctx?.agentId || 'unknown',
+        ...(ctx?.provider ? { provider: ctx.provider } : {}),
+        ...(ctx?.endpoint ? { endpoint: ctx.endpoint } : {}),
+        ...(ctx?.chatId ? { chatId: ctx.chatId } : {}),
+        eventType,
+        data,
+      });
+    } catch {}
+  }
+
+  private extractReasoningPayload(data: any): any {
+    return (
+      data?.choices?.[0]?.delta?.reasoning_content ||
+      data?.delta?.reasoning_content ||
+      data?.reasoning_content ||
+      data?.reasoning ||
+      null
+    );
+  }
+
+  private dispatchFastGPTEvent(
+    provider: AIProvider,
+    eventName: string,
+    payload: any,
+    onChunk: (chunk: string) => void,
+    onStatus?: (status: StreamStatus) => void,
+    onEvent?: (eventName: string, data: any) => void,
+    ctx?: { agentId: string; chatId?: string; endpoint: string; provider: string }
+  ): void {
+    const resolvedEvent = (eventName || (typeof payload?.event === 'string' ? payload.event : '') || '').trim();
+    const eventKey = getNormalizedEventKey(resolvedEvent || 'message');
+
+    const emitEvent = (name: string, data: any) => {
+      if (!onEvent) return;
+      try {
+        onEvent(name, data);
+      } catch (emitError) {
+        console.warn('事件回调执行失败:', emitError);
+      }
+    };
+
+    if (isChatIdEvent(resolvedEvent)) {
+      this.logStreamEvent(ctx, 'chatId', payload);
+      emitEvent('chatId', payload);
+      return;
+    }
+
+    if (isInteractiveEvent(resolvedEvent)) {
+      this.logStreamEvent(ctx, 'interactive', payload);
+      emitEvent('interactive', payload);
+      return;
+    }
+
+    if (eventKey === getNormalizedEventKey('flowResponses')) {
+      this.logStreamEvent(ctx, 'flowResponses', payload);
+      onStatus?.({ type: 'progress', status: 'completed', moduleName: '执行完成' });
+      emitEvent(resolvedEvent || 'flowResponses', payload);
+      return;
+    }
+
+    if (isStatusEvent(resolvedEvent)) {
+      const statusEvent: StreamStatus = {
+        type: 'flowNodeStatus',
+        status: (payload?.status ?? 'running') as StreamStatus['status'],
+        moduleName: payload?.name || payload?.moduleName || payload?.id || '未知模块',
+      };
+      this.logStreamEvent(ctx, 'flowNodeStatus', payload);
+      onStatus?.(statusEvent);
+      emitEvent(resolvedEvent || 'flowNodeStatus', payload);
+      return;
+    }
+
+    if (eventKey === getNormalizedEventKey('answer')) {
+      const answerContent = payload?.choices?.[0]?.delta?.content ?? payload?.content ?? '';
+      if (answerContent) {
+        this.logStreamEvent(ctx, 'answer', payload);
+        onChunk(answerContent);
+      }
+
+      const reasoningContent = this.extractReasoningPayload(payload);
+      if (reasoningContent) {
+        this.logStreamEvent(ctx, 'reasoning', reasoningContent);
+        emitEvent('reasoning', { event: resolvedEvent || 'reasoning', data: reasoningContent });
+      }
+      return;
+    }
+
+    if (isReasoningEvent(resolvedEvent)) {
+      this.logStreamEvent(ctx, 'reasoning', payload);
+      emitEvent('reasoning', { event: resolvedEvent || 'reasoning', data: payload });
+      return;
+    }
+
+    if (isDatasetEvent(resolvedEvent) || isSummaryEvent(resolvedEvent) || isToolEvent(resolvedEvent)) {
+      this.logStreamEvent(ctx, resolvedEvent || 'event', payload);
+      emitEvent(resolvedEvent || 'event', payload);
+      return;
+    }
+
+    if (isUsageEvent(resolvedEvent)) {
+      this.logStreamEvent(ctx, 'usage', payload);
+      emitEvent('usage', payload);
+      return;
+    }
+
+    if (isEndEvent(resolvedEvent)) {
+      this.logStreamEvent(ctx, resolvedEvent || 'end', payload);
+      onStatus?.({ type: 'complete', status: 'completed' });
+      emitEvent(resolvedEvent || 'end', payload);
+      return;
+    }
+
+    const transformed = provider.transformStreamResponse(payload);
+    if (transformed) {
+      this.logStreamEvent(ctx, 'chunk', transformed);
+      onChunk(transformed);
+    }
+
+    if (resolvedEvent && !isChunkLikeEvent(resolvedEvent)) {
+      emitEvent(resolvedEvent, payload);
+    }
+  }
+
   /**
-   * 处理流式响应 - 修复 FastGPT SSE 事件解析
+   * 处理流式响应 - 兼容 FastGPT 全事件并支持多行 data
    */
   private async handleStreamResponse(
     stream: any,
@@ -416,165 +644,88 @@ export class ChatProxyService {
   ): Promise<void> {
     return new Promise((resolve, reject) => {
       let buffer = '';
-      let currentEventType = '';
+      let completed = false;
 
       console.log('开始处理流式响应，提供商:', config.provider);
 
+      const flushEventBlock = (rawBlock: string) => {
+        const parsed = this.parseSSEEventBlock(rawBlock.replace(/\r/g, ''));
+        if (!parsed) {
+          return;
+        }
+
+        const rawData = parsed.data;
+        if (!rawData) {
+          return;
+        }
+
+        if (rawData.trim() === '[DONE]') {
+          if (completed) {
+            return;
+          }
+          completed = true;
+          console.log('流式响应完成 [DONE]');
+          this.logStreamEvent(ctx, 'complete', { done: true });
+          onStatus?.({ type: 'complete', status: 'completed' });
+          resolve();
+          return;
+        }
+
+        let payload: any = rawData;
+        if (typeof rawData === 'string') {
+          const trimmed = rawData.trim();
+          if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+            try {
+              payload = JSON.parse(rawData);
+            } catch (parseError) {
+              console.warn('解析 SSE 数据失败:', parseError, '原始数据:', rawData);
+              payload = rawData;
+            }
+          }
+        }
+
+        this.dispatchFastGPTEvent(provider, parsed.event, payload, onChunk, onStatus, onEvent, ctx);
+      };
+
       stream.on('data', (chunk: Buffer) => {
-        const chunkStr = chunk.toString();
-        buffer += chunkStr;
+        buffer += chunk.toString();
 
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
+        let boundary: { index: number; length: number } | null;
+        while ((boundary = this.findNextEventBoundary(buffer)) !== null) {
+          const rawBlock = buffer.slice(0, boundary.index);
+          buffer = buffer.slice(boundary.index + boundary.length);
 
-        for (const line of lines) {
-          if (line.trim() === '') {
-            currentEventType = '';
+          if (rawBlock.trim().length === 0) {
             continue;
           }
 
-          try {
-            if (line.startsWith('event: ')) {
-              currentEventType = line.slice(7).trim();
-              console.log('检测到事件类型:', currentEventType);
-              continue;
-            }
-
-            if (line.startsWith('data: ')) {
-              const dataStr = line.slice(6);
-
-              if (dataStr === '[DONE]') {
-                console.log('流式响应完成');
-                try { this.chatLog.logStreamEvent({
-                  agentId: ctx?.agentId || 'unknown',
-                  ...(ctx?.provider ? { provider: ctx.provider } : {}),
-                  ...(ctx?.endpoint ? { endpoint: ctx.endpoint } : {}),
-                  ...(ctx?.chatId ? { chatId: ctx.chatId } : {}),
-                  eventType: 'complete',
-                  data: { done: true }
-                }); } catch {}
-                onStatus?.({ type: 'complete', status: 'completed' });
-                resolve();
-                return;
-              }
-
-              const data = JSON.parse(dataStr);
-
-              if (config.provider === 'fastgpt' && config.features.streamingConfig.statusEvents) {
-                switch (currentEventType) {
-                  case 'flowNodeStatus': {
-                    const statusEvent = {
-                      type: 'flowNodeStatus' as const,
-                      status: (data.status ?? 'running') as 'running' | 'completed' | 'error',
-                      moduleName: data.name || data.moduleName || '未知模块',
-                    };
-                    try { this.chatLog.logStreamEvent({
-                      agentId: ctx?.agentId || 'unknown',
-                      ...(ctx?.provider ? { provider: ctx.provider } : {}),
-                      ...(ctx?.endpoint ? { endpoint: ctx.endpoint } : {}),
-                      ...(ctx?.chatId ? { chatId: ctx.chatId } : {}),
-                      eventType: 'flowNodeStatus', data
-                    }); } catch {}
-                    onStatus?.(statusEvent);
-                    break; }
-
-                  case 'answer': {
-                    const answerContent = data.choices?.[0]?.delta?.content || data.content || '';
-                    try { this.chatLog.logStreamEvent({
-                      agentId: ctx?.agentId || 'unknown',
-                      ...(ctx?.provider ? { provider: ctx.provider } : {}),
-                      ...(ctx?.endpoint ? { endpoint: ctx.endpoint } : {}),
-                      ...(ctx?.chatId ? { chatId: ctx.chatId } : {}),
-                      eventType: 'answer', data
-                    }); } catch {}
-                    if (answerContent) {
-                      console.log('发送答案内容:', answerContent.substring(0, 50));
-                      onChunk(answerContent);
-                    }
-                    break; }
-
-                  case 'interactive': {
-                    try { this.chatLog.logStreamEvent({
-                      agentId: ctx?.agentId || 'unknown',
-                      ...(ctx?.provider ? { provider: ctx.provider } : {}),
-                      ...(ctx?.endpoint ? { endpoint: ctx.endpoint } : {}),
-                      ...(ctx?.chatId ? { chatId: ctx.chatId } : {}),
-                      eventType: 'interactive', data
-                    }); } catch {}
-                    onEvent?.('interactive', data);
-                    break; }
-
-                  case 'flowResponses': {
-                    try { this.chatLog.logStreamEvent({
-                      agentId: ctx?.agentId || 'unknown',
-                      ...(ctx?.provider ? { provider: ctx.provider } : {}),
-                      ...(ctx?.endpoint ? { endpoint: ctx.endpoint } : {}),
-                      ...(ctx?.chatId ? { chatId: ctx.chatId } : {}),
-                      eventType: 'flowResponses', data
-                    }); } catch {}
-                    onStatus?.({ type: 'progress', status: 'completed', moduleName: '执行完成' });
-                    break; }
-
-                  default: {
-                    const defaultContent = provider.transformStreamResponse(data);
-                    if (defaultContent) {
-                      try { this.chatLog.logStreamEvent({
-                        agentId: ctx?.agentId || 'unknown',
-                        ...(ctx?.provider ? { provider: ctx.provider } : {}),
-                        ...(ctx?.endpoint ? { endpoint: ctx.endpoint } : {}),
-                        ...(ctx?.chatId ? { chatId: ctx.chatId } : {}),
-                        eventType: 'chunk', data: defaultContent
-                      }); } catch {}
-                      console.log('默认内容处理:', defaultContent.substring(0, 50));
-                      onChunk(defaultContent);
-                    }
-                  }
-                }
-              } else {
-                const content = provider.transformStreamResponse(data);
-                if (content) {
-                  try { this.chatLog.logStreamEvent({
-                    agentId: ctx?.agentId || 'unknown',
-                    ...(ctx?.provider ? { provider: ctx.provider } : {}),
-                    ...(ctx?.endpoint ? { endpoint: ctx.endpoint } : {}),
-                    ...(ctx?.chatId ? { chatId: ctx.chatId } : {}),
-                    eventType: 'chunk', data: content
-                  }); } catch {}
-                  console.log('标准内容处理:', content.substring(0, 50));
-                  onChunk(content);
-                }
-              }
-            }
-          } catch (parseError) {
-            console.warn('解析流式数据失败:', parseError, '原始行:', line);
-          }
+          flushEventBlock(rawBlock);
         }
       });
 
       stream.on('end', () => {
-        console.log('流式响应结束');
-        try { this.chatLog.logStreamEvent({
-          agentId: ctx?.agentId || 'unknown',
-          ...(ctx?.provider ? { provider: ctx.provider } : {}),
-          ...(ctx?.endpoint ? { endpoint: ctx.endpoint } : {}),
-          ...(ctx?.chatId ? { chatId: ctx.chatId } : {}),
-          eventType: 'complete', data: { ended: true }
-        }); } catch {}
-        onStatus?.({ type: 'complete', status: 'completed' });
-        resolve();
+        if (buffer.trim().length > 0) {
+          flushEventBlock(buffer);
+          buffer = '';
+        }
+
+        if (!completed) {
+          completed = true;
+          console.log('流式响应结束');
+          this.logStreamEvent(ctx, 'complete', { ended: true });
+          onStatus?.({ type: 'complete', status: 'completed' });
+          resolve();
+        }
       });
 
       stream.on('error', (error: Error) => {
         console.error('流式响应错误:', error);
-        try { this.chatLog.logStreamEvent({
-          agentId: ctx?.agentId || 'unknown',
-          ...(ctx?.provider ? { provider: ctx.provider } : {}),
-          ...(ctx?.endpoint ? { endpoint: ctx.endpoint } : {}),
-          ...(ctx?.chatId ? { chatId: ctx.chatId } : {}),
-          eventType: 'error', data: { message: error.message }
-        }); } catch {}
+        this.logStreamEvent(ctx, 'error', { message: error.message });
         onStatus?.({ type: 'error', status: 'error', error: error.message });
-        reject(error);
+        if (!completed) {
+          completed = true;
+          reject(error);
+        }
       });
     });
   }
