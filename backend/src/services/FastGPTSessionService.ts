@@ -1,4 +1,4 @@
-import axios, { AxiosInstance, AxiosResponse } from 'axios';
+import axios from 'axios';
 import { AgentConfigService } from './AgentConfigService';
 import {
   AgentConfig,
@@ -34,7 +34,7 @@ const buildCacheKey = (agentId: string, segment: string) => `${agentId}::${segme
  */
 export class FastGPTSessionService {
   private readonly agentService: AgentConfigService;
-  private readonly httpClient: AxiosInstance;
+  private readonly httpClient: ReturnType<typeof axios.create>;
   private readonly historyListCache = new Map<string, CacheEntry<FastGPTChatHistorySummary[]>>();
   private readonly historyDetailCache = new Map<string, CacheEntry<FastGPTChatHistoryDetail>>();
   private readonly inFlightRequests = new Map<string, Promise<any>>();
@@ -54,6 +54,18 @@ export class FastGPTSessionService {
     sampleSize: 30,
     adjustIntervalMs: 45 * 1000,
   });
+  private readonly historyEndpointBases = [
+    '/api/core/chat/history',
+    '/api/v1/core/chat/history',
+    '/api/chat/history',
+    '/api/v1/chat/history',
+  ];
+  private readonly feedbackEndpointBases = [
+    '/api/core/chat/feedback',
+    '/api/v1/core/chat/feedback',
+    '/api/chat/feedback',
+    '/api/v1/chat/feedback',
+  ];
 
   constructor(agentService: AgentConfigService) {
     this.agentService = agentService;
@@ -62,30 +74,62 @@ export class FastGPTSessionService {
     });
   }
 
+  /**
+   * 校验并获取 FastGPT 智能体配置
+   *
+   * Args:
+   *   agentId: 智能体唯一标识
+   * Returns:
+   *   AgentConfig: 合法的智能体配置
+   * Raises:
+   *   Error: code = NOT_FOUND | INVALID_PROVIDER | INVALID_APP_ID
+   */
   private async ensureFastGPTAgent(agentId: string): Promise<AgentConfig> {
     const agent = await this.agentService.getAgent(agentId);
     if (!agent) {
-      throw new Error(`智能体不存在: ${agentId}`);
+      const err = new Error(`智能体不存在: ${agentId}`) as any;
+      err.code = 'NOT_FOUND';
+      throw err;
     }
     if (agent.provider !== 'fastgpt') {
-      throw new Error('仅 FastGPT 智能体支持会话历史接口');
+      const err = new Error('仅 FastGPT 智能体支持会话历史接口') as any;
+      err.code = 'INVALID_PROVIDER';
+      throw err;
     }
     if (!agent.appId || !/^[a-fA-F0-9]{24}$/.test(agent.appId)) {
-      throw new Error('FastGPT 智能体缺少有效的 appId 配置');
+      const err = new Error('FastGPT 智能体缺少有效的 appId 配置') as any;
+      err.code = 'INVALID_APP_ID';
+      throw err;
     }
     return agent;
   }
 
+  /**
+   * 计算 FastGPT 基础 URL
+   */
   private getBaseUrl(agent: AgentConfig): string {
     if (!agent.endpoint) {
       throw new Error('FastGPT 智能体缺少 endpoint 配置');
     }
-    if (agent.endpoint.endsWith(FASTGPT_COMPLETIONS_SUFFIX)) {
-      return agent.endpoint.slice(0, -FASTGPT_COMPLETIONS_SUFFIX.length);
+    const cleaned = agent.endpoint.replace(/[`\s]+/g, '').replace(/\/$/, '');
+    if (cleaned.endsWith(FASTGPT_COMPLETIONS_SUFFIX)) {
+      return cleaned.slice(0, -FASTGPT_COMPLETIONS_SUFFIX.length);
     }
-    return agent.endpoint.replace(/\/$/, '');
+    return cleaned;
   }
 
+  /**
+   * 统一请求入口，支持多路径尝试与 /v1 回退
+   *
+   * Args:
+   *   agent: 智能体配置
+   *   attempts: 请求尝试序列（方法+路径）
+   *   options: 请求参数与 body
+   * Returns:
+   *   AxiosResponse<T>
+   * Raises:
+   *   Error: 最终请求失败错误
+   */
   private async requestWithFallback<T = any>(
     agent: AgentConfig,
     attempts: RequestDescriptor[],
@@ -93,7 +137,7 @@ export class FastGPTSessionService {
       params?: Record<string, any>;
       data?: Record<string, any>;
     } = {}
-  ): Promise<AxiosResponse<T>> {
+  ) {
     const baseUrl = this.getBaseUrl(agent);
     const headers = {
       Authorization: `Bearer ${agent.apiKey}`,
@@ -102,21 +146,81 @@ export class FastGPTSessionService {
 
     let lastError: unknown;
     for (const attempt of attempts) {
-      const url = `${baseUrl}${attempt.path}`;
+      // 路径净化，移除反引号与空白
+      const cleanPath = attempt.path.replace(/[`\s]+/g, '');
+      const url = `${baseUrl}${cleanPath}`;
+
       try {
         if (attempt.method === 'get') {
-          return await this.httpClient.get<T>(url, { params: options.params, headers });
+          return await this.httpClient.get<T>(url, { 
+            params: options.params || {}, 
+            headers 
+          });
         }
         if (attempt.method === 'delete') {
-          return await this.httpClient.delete<T>(url, { params: options.params, data: options.data, headers });
+          return await this.httpClient.delete<T>(url, { 
+            params: options.params || {}, 
+            headers 
+          });
         }
-        return await this.httpClient.post<T>(url, options.data, { params: options.params, headers });
-      } catch (error) {
+        return await this.httpClient.post<T>(url, options.data, { 
+          params: options.params || {}, 
+          headers 
+        });
+      } catch (error: any) {
         lastError = error;
+        // 若 404，尝试 /v1 回退
+        const status = error?.response?.status;
+        if (status === 404) {
+          const v1Url = `${baseUrl}/v1${cleanPath.startsWith('/') ? cleanPath : `/${cleanPath}`}`;
+          try {
+            if (attempt.method === 'get') {
+              return await this.httpClient.get<T>(v1Url, { 
+                params: options.params || {}, 
+                headers 
+              });
+            }
+            if (attempt.method === 'delete') {
+              return await this.httpClient.delete<T>(v1Url, { 
+                params: options.params || {}, 
+                headers 
+              });
+            }
+            return await this.httpClient.post<T>(v1Url, options.data, { 
+              params: options.params || {}, 
+              headers 
+            });
+          } catch (v1Error) {
+            lastError = v1Error;
+          }
+        }
       }
     }
 
     throw lastError instanceof Error ? lastError : new Error(`FastGPT 接口调用失败: ${getErrorMessage(lastError)}`);
+  }
+
+  private buildEndpointAttempts(
+    bases: string[],
+    suffixes: string[],
+    method: RequestDescriptor['method']
+  ): RequestDescriptor[] {
+    const attempts: RequestDescriptor[] = [];
+    const seen = new Set<string>();
+
+    for (const base of bases) {
+      for (const rawSuffix of suffixes) {
+        const suffix = rawSuffix.replace(/^\/+/g, '');
+        const path = `${base}/${suffix}`.replace(/\/+/g, '/');
+        const key = `${method}:${path}`;
+        if (!seen.has(key)) {
+          attempts.push({ method, path });
+          seen.add(key);
+        }
+      }
+    }
+
+    return attempts;
   }
 
   private async getWithCache<T>(
@@ -257,11 +361,11 @@ export class FastGPTSessionService {
       pageSize: pagination?.pageSize,
     };
 
-    const attempts: RequestDescriptor[] = [
-      { method: 'get', path: '/api/core/chat/history/list' },
-      { method: 'get', path: '/api/core/chat/history/getHistoryList' },
-      { method: 'get', path: '/api/core/chat/history/getHistories' },
-    ];
+    const attempts = this.buildEndpointAttempts(
+      this.historyEndpointBases,
+      ['list', 'getHistoryList', 'getHistories'],
+      'get'
+    );
 
     const cacheKey = buildCacheKey(
       agentId,
@@ -289,11 +393,11 @@ export class FastGPTSessionService {
       chatId,
     };
 
-    const attempts: RequestDescriptor[] = [
-      { method: 'get', path: '/api/core/chat/history/detail' },
-      { method: 'get', path: '/api/core/chat/history/getHistory' },
-      { method: 'get', path: '/api/core/chat/history/messages' },
-    ];
+    const attempts = this.buildEndpointAttempts(
+      this.historyEndpointBases,
+      ['detail', 'getHistory', 'messages'],
+      'get'
+    );
 
     const cacheKey = buildCacheKey(agentId, `detail:${chatId}`);
 
@@ -313,11 +417,11 @@ export class FastGPTSessionService {
     const agent = await this.ensureFastGPTAgent(agentId);
     const data = { appId: agent.appId, chatId };
 
-    const attempts: RequestDescriptor[] = [
-      { method: 'post', path: '/api/core/chat/history/delete' },
-      { method: 'post', path: '/api/core/chat/history/removeHistory' },
-      { method: 'post', path: '/api/core/chat/history/delHistory' },
-    ];
+    const attempts = this.buildEndpointAttempts(
+      this.historyEndpointBases,
+      ['delete', 'removeHistory', 'delHistory'],
+      'post'
+    );
 
     const response = await this.requestWithFallback(agent, attempts, { data });
     const payload = response.data;
@@ -332,10 +436,9 @@ export class FastGPTSessionService {
     const agent = await this.ensureFastGPTAgent(agentId);
     const data = { appId: agent.appId };
 
-    const attempts: RequestDescriptor[] = [
-      { method: 'post', path: '/api/core/chat/history/clear' },
-      { method: 'post', path: '/api/core/chat/history/clearHistories' },
-      { method: 'delete', path: '/api/core/chat/history/clear' },
+    const attempts = [
+      ...this.buildEndpointAttempts(this.historyEndpointBases, ['clear', 'clearHistories'], 'post'),
+      ...this.buildEndpointAttempts(this.historyEndpointBases, ['clear'], 'delete'),
     ];
 
     const response = await this.requestWithFallback(agent, attempts, { data });
@@ -345,6 +448,43 @@ export class FastGPTSessionService {
     }
 
     this.invalidateHistoryCaches(agentId);
+  }
+
+  async updateUserFeedback(
+    agentId: string,
+    payload: {
+      chatId: string;
+      dataId: string;
+      userGoodFeedback?: string;
+      userBadFeedback?: string;
+    }
+  ): Promise<void> {
+    const agent = await this.ensureFastGPTAgent(agentId);
+
+    const data: Record<string, any> = {
+      appId: agent.appId,
+      chatId: payload.chatId,
+      dataId: payload.dataId,
+    };
+
+    if (payload.userGoodFeedback) {
+      data.userGoodFeedback = payload.userGoodFeedback;
+    }
+    if (payload.userBadFeedback) {
+      data.userBadFeedback = payload.userBadFeedback;
+    }
+
+    const attempts = this.buildEndpointAttempts(
+      this.feedbackEndpointBases,
+      ['updateUserFeedback'],
+      'post'
+    );
+
+    const response = await this.requestWithFallback(agent, attempts, { data });
+    const respPayload = response.data as any;
+    if (respPayload?.code && respPayload.code !== 200) {
+      throw new Error(respPayload?.message || 'FastGPT 更新反馈失败');
+    }
   }
 
   prepareRetryPayload(

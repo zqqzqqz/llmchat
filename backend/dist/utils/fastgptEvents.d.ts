@@ -1,0 +1,12 @@
+export declare const isReasoningEvent: (eventName: string) => boolean;
+export declare const isDatasetEvent: (eventName: string) => boolean;
+export declare const isSummaryEvent: (eventName: string) => boolean;
+export declare const isToolEvent: (eventName: string) => boolean;
+export declare const isUsageEvent: (eventName: string) => boolean;
+export declare const isEndEvent: (eventName: string) => boolean;
+export declare const isStatusEvent: (eventName: string) => boolean;
+export declare const isInteractiveEvent: (eventName: string) => boolean;
+export declare const isChatIdEvent: (eventName: string) => boolean;
+export declare const isChunkLikeEvent: (eventName: string) => boolean;
+export declare const getNormalizedEventKey: (name: string) => string;
+//# sourceMappingURL=fastgptEvents.d.ts.map

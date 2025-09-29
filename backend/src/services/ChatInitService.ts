@@ -1,4 +1,4 @@
-import axios, { AxiosInstance } from 'axios';
+import axios from 'axios';
 import { AgentConfigService } from './AgentConfigService';
 import { AgentConfig, FastGPTInitResponse } from '@/types';
 import { AdaptiveTtlPolicy } from '@/utils/adaptiveCache';
@@ -8,7 +8,7 @@ import { AdaptiveTtlPolicy } from '@/utils/adaptiveCache';
  * 负责调用FastGPT的初始化API并处理流式输出
  */
 export class ChatInitService {
-  private httpClient: AxiosInstance;
+  private httpClient: ReturnType<typeof axios.create>;
   private agentService: AgentConfigService;
   private cache: Map<string, { data: FastGPTInitResponse; expiresAt: number }> = new Map();
   private readonly cachePolicy = new AdaptiveTtlPolicy({
@@ -138,17 +138,19 @@ export class ChatInitService {
         },
       });
 
-      if (response.data.code !== 200) {
-        throw new Error(`FastGPT API错误: ${response.data.message || '未知错误'}`);
+      const responseData = response.data as any;
+      if (responseData.code !== 200) {
+        throw new Error(`FastGPT API错误: ${responseData.message || '未知错误'}`);
       }
 
       console.log('✅ FastGPT初始化API调用成功');
-      return response.data.data;
+      return responseData.data;
 
     } catch (error) {
       console.error('❌ FastGPT初始化API调用失败:', error);
-      if (axios.isAxiosError(error)) {
-        const message = error.response?.data?.message || error.message;
+      if (error && typeof error === 'object' && 'isAxiosError' in error && (error as any).isAxiosError) {
+        const axiosError = error as any;
+        const message = axiosError.response?.data?.message || axiosError.message;
         throw new Error(`FastGPT API调用失败: ${message}`);
       }
       throw error;

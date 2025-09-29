@@ -13,6 +13,7 @@ import { useChatStore } from '@/store/chatStore';
 import { chatService } from '@/services/api';
 import { ReasoningTrail } from './ReasoningTrail';
 import { EventTrail } from './EventTrail';
+import { InteractiveBubble } from './InteractiveBubble';
 
 import avatarImg from '@/img/4.png';
 
@@ -41,9 +42,19 @@ export const MessageItem: React.FC<MessageItemProps> = ({
   onInteractiveFormSubmit
 }) => {
   const [copied, setCopied] = useState(false);
+  // 交互节点专用渲染：提前返回，避免在条件内调用 Hook 导致顺序变更
+  if (message.interactive) {
+    return (
+      <InteractiveBubble
+        data={message.interactive}
+        onInteractiveSelect={onInteractiveSelect}
+        onInteractiveFormSubmit={onInteractiveFormSubmit}
+      />
+    );
+  }
   // 交互节点专用渲染（优先于普通 HUMAN/AI 文本）
   if (message.interactive) {
-    const data = message.interactive;
+    const data: any = message.interactive;
 
     // userInput 表单的本地状态
     const [formValues, setFormValues] = useState<Record<string, any>>({});
@@ -348,11 +359,11 @@ export const MessageItem: React.FC<MessageItemProps> = ({
                     <circle cx="18" cy="12" r="2"></circle>
                     <path d="M8 12h4M14 10l2-2M14 12h2"></path>
                   </svg>
-                  {/* 三点动画 */}
-                  <div className="flex space-x-1">
-                    <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
-                    <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }}></div>
-                    <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }}></div>
+                  {/* 三点打字动效：仅在 isStreaming 时渲染，停止即不显示 */}
+                  <div className="typing-dots ml-1">
+                    <span className="dot" />
+                    <span className="dot" />
+                    <span className="dot" />
                   </div>
                   <span className="text-sm"></span>
                   {streamingStatus?.type === 'flowNodeStatus' && (

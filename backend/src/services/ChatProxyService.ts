@@ -1,4 +1,4 @@
-import axios, { AxiosInstance, AxiosResponse } from 'axios';
+import axios from 'axios';
 import {
   AgentConfig,
   ChatMessage,
@@ -254,7 +254,7 @@ export class AnthropicProvider implements AIProvider {
  */
 export class ChatProxyService {
   private agentService: AgentConfigService;
-  private httpClient: AxiosInstance;
+  private httpClient: ReturnType<typeof axios.create>;
   private providers: Map<string, AIProvider> = new Map();
   private chatLog: ChatLogService = new ChatLogService();
 
@@ -307,7 +307,7 @@ export class ChatProxyService {
       const headers = provider.buildHeaders(config);
       
       // 发送请求
-      const response: AxiosResponse = await this.httpClient.post(
+      const response = await this.httpClient.post(
         config.endpoint,
         requestData,
         { headers }
@@ -527,6 +527,17 @@ export class ChatProxyService {
     );
   }
 
+  /**
+   * 分发FastGPT事件到相应的回调函数
+   * 
+   * @param provider AI提供商适配器
+   * @param eventName 事件名称
+   * @param payload 事件数据
+   * @param onChunk 内容块回调函数
+   * @param onStatus 状态回调函数
+   * @param onEvent 通用事件回调函数
+   * @param ctx 上下文信息
+   */
   private dispatchFastGPTEvent(
     provider: AIProvider,
     eventName: string,
@@ -548,18 +559,21 @@ export class ChatProxyService {
       }
     };
 
+    // 处理chatId事件
     if (isChatIdEvent(resolvedEvent)) {
       this.logStreamEvent(ctx, 'chatId', payload);
       emitEvent('chatId', payload);
       return;
     }
 
+    // 处理交互事件
     if (isInteractiveEvent(resolvedEvent)) {
       this.logStreamEvent(ctx, 'interactive', payload);
       emitEvent('interactive', payload);
       return;
     }
 
+    // 处理流程响应事件
     if (eventKey === getNormalizedEventKey('flowResponses')) {
       this.logStreamEvent(ctx, 'flowResponses', payload);
       onStatus?.({ type: 'progress', status: 'completed', moduleName: '执行完成' });
@@ -567,6 +581,7 @@ export class ChatProxyService {
       return;
     }
 
+    // 处理状态事件
     if (isStatusEvent(resolvedEvent)) {
       const statusEvent: StreamStatus = {
         type: 'flowNodeStatus',
@@ -579,6 +594,7 @@ export class ChatProxyService {
       return;
     }
 
+    // 处理answer事件 - 这是主要的内容流
     if (eventKey === getNormalizedEventKey('answer')) {
       const answerContent = payload?.choices?.[0]?.delta?.content ?? payload?.content ?? '';
       if (answerContent) {
@@ -591,27 +607,31 @@ export class ChatProxyService {
         this.logStreamEvent(ctx, 'reasoning', reasoningContent);
         emitEvent('reasoning', { event: resolvedEvent || 'reasoning', data: reasoningContent });
       }
-      return;
+      return; // 重要：直接返回，避免后续的兜底处理
     }
 
+    // 处理推理事件
     if (isReasoningEvent(resolvedEvent)) {
       this.logStreamEvent(ctx, 'reasoning', payload);
       emitEvent('reasoning', { event: resolvedEvent || 'reasoning', data: payload });
       return;
     }
 
+    // 处理数据集、摘要、工具事件
     if (isDatasetEvent(resolvedEvent) || isSummaryEvent(resolvedEvent) || isToolEvent(resolvedEvent)) {
       this.logStreamEvent(ctx, resolvedEvent || 'event', payload);
       emitEvent(resolvedEvent || 'event', payload);
       return;
     }
 
+    // 处理使用量事件
     if (isUsageEvent(resolvedEvent)) {
       this.logStreamEvent(ctx, 'usage', payload);
       emitEvent('usage', payload);
       return;
     }
 
+    // 处理结束事件
     if (isEndEvent(resolvedEvent)) {
       this.logStreamEvent(ctx, resolvedEvent || 'end', payload);
       onStatus?.({ type: 'complete', status: 'completed' });
@@ -619,12 +639,16 @@ export class ChatProxyService {
       return;
     }
 
-    const transformed = provider.transformStreamResponse(payload);
-    if (transformed) {
-      this.logStreamEvent(ctx, 'chunk', transformed);
-      onChunk(transformed);
+    // 兜底处理：只处理非answer事件，避免重复处理
+    if (eventKey !== getNormalizedEventKey('answer')) {
+      const transformed = provider.transformStreamResponse(payload);
+      if (transformed) {
+        this.logStreamEvent(ctx, 'chunk', transformed);
+        onChunk(transformed);
+      }
     }
 
+    // 发送未识别的事件
     if (resolvedEvent && !isChunkLikeEvent(resolvedEvent)) {
       emitEvent(resolvedEvent, payload);
     }

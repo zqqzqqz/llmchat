@@ -92,25 +92,29 @@ export const ChatContainer: React.FC = () => {
   // 交互回调：区分 init 起源与普通交互
   const handleInteractiveSelect = (payload: any) => {
     if (typeof payload === 'string') {
-      // 普通交互（非 init）：直接继续运行
+      // 普通交互（非 init）：先移除交互气泡，再继续运行
+      try { useChatStore.getState().removeLastInteractiveMessage(); } catch {}
       return continueInteractiveSelect(payload);
     }
     if (payload && payload.origin === 'init') {
       // init 交互：仅收集变量，显示输入框，不请求后端
       setPendingInitVars((prev) => ({ ...(prev || {}), [payload.key]: payload.value }));
       setHideComposer(false);
+      try { useChatStore.getState().removeLastInteractiveMessage(); } catch {}
     }
   };
 
   const handleInteractiveFormSubmit = (payload: any) => {
     // 非 init 表单：直接继续运行
     if (!payload || payload.origin !== 'init') {
+      try { useChatStore.getState().removeLastInteractiveMessage(); } catch {}
       return continueInteractiveForm(payload);
     }
     // init 表单：仅收集变量，显示输入框
     const values = payload.values || {};
     setPendingInitVars((prev) => ({ ...(prev || {}), ...values }));
     setHideComposer(false);
+    try { useChatStore.getState().removeLastInteractiveMessage(); } catch {}
   };
 
   // 发送消息：若存在 init 变量，则在首次发送时一并携带

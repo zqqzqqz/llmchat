@@ -57,6 +57,8 @@ export interface FastGPTEvent {
   level: 'info' | 'success' | 'warning' | 'error';
   payload: any;
   timestamp: number;
+  groupId?: string;
+  stage?: 'start' | 'update' | 'complete';
 }
 
 export interface ProductPreviewBoundingBox {

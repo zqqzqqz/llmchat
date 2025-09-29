@@ -5,6 +5,7 @@ export declare class ChatLogService {
     private recordStream;
     private includeRaw;
     private includeNormalized;
+    private observability;
     constructor();
     private ensureDir;
     private getLogFilePath;
@@ -26,5 +27,6 @@ export declare class ChatLogService {
         eventType: string;
         data: any;
     }): void;
+    private pushObservability;
 }
 //# sourceMappingURL=ChatLogService.d.ts.map

@@ -1,5 +1,4 @@
 import { Request, Response, NextFunction } from 'express';
-import axios from 'axios';
 import { AgentConfigService } from '@/services/AgentConfigService';
 import { ChatProxyService } from '@/services/ChatProxyService';
 import { ChatInitService } from '@/services/ChatInitService';
@@ -565,40 +564,12 @@ export class ChatController {
 
       const { agentId, chatId, dataId, userGoodFeedback, userBadFeedback } = value as any;
 
-      // 获取智能体配置
-      const agent = await this.agentService.getAgent(agentId);
-      if (!agent) {
-        const apiError: ApiError = {
-          code: 'AGENT_NOT_FOUND',
-          message: `智能体不存在: ${agentId}`,
-          timestamp: new Date().toISOString(),
-        };
-        res.status(404).json(apiError);
-        return;
-      }
-
-      // 组装 FastGPT 反馈 API 地址
-      const baseUrl = agent.endpoint.replace('/api/v1/chat/completions', '');
-      const url = `${baseUrl}/api/core/chat/feedback/updateUserFeedback`;
-
-      // 构建请求体
-      const payload: any = {
-        appId: agent.appId || agent.id,
+      await this.fastgptSessionService.updateUserFeedback(agentId, {
         chatId,
         dataId,
-        ...(userGoodFeedback ? { userGoodFeedback } : {}),
-        ...(userBadFeedback ? { userBadFeedback } : {}),
-      };
-
-      const headers = {
-        Authorization: `Bearer ${agent.apiKey}`,
-        'Content-Type': 'application/json'
-      };
-
-      const resp = await axios.post(url, payload, { headers });
-      if (resp.data?.code !== 200) {
-        throw new Error(resp.data?.message || '反馈失败');
-      }
+        userGoodFeedback,
+        userBadFeedback,
+      });
 
       res.json({ success: true, data: null, timestamp: new Date().toISOString() });
     } catch (err) {
@@ -608,7 +579,26 @@ export class ChatController {
         message: err instanceof Error ? err.message : '反馈失败',
         timestamp: new Date().toISOString(),
       };
-      res.status(500).json(apiError);
+      let status = 500;
+      const errCode = (err as any)?.code;
+      const axiosStatus = (err as any)?.response?.status;
+      if (errCode === 'NOT_FOUND') {
+        status = 404;
+        apiError.code = 'AGENT_NOT_FOUND';
+      } else if (errCode === 'INVALID_PROVIDER' || errCode === 'INVALID_APP_ID') {
+        status = 400;
+        apiError.code = errCode;
+      } else if (axiosStatus === 404) {
+        status = 502;
+        apiError.code = 'UPSTREAM_NOT_FOUND';
+      } else if (axiosStatus === 401) {
+        status = 401;
+        apiError.code = 'UPSTREAM_UNAUTHORIZED';
+      } else if (axiosStatus === 408) {
+        status = 504;
+        apiError.code = 'UPSTREAM_TIMEOUT';
+      }
+      res.status(status).json(apiError);
     }
   };
 
@@ -648,14 +638,36 @@ export class ChatController {
         data: histories,
         timestamp: new Date().toISOString(),
       });
-    } catch (err) {
+    } catch (err: any) {
       console.error('获取聊天历史列表失败:', err);
       const apiError: ApiError = {
         code: 'GET_HISTORY_LIST_FAILED',
         message: err instanceof Error ? err.message : '获取聊天历史失败',
         timestamp: new Date().toISOString(),
       };
-      res.status(500).json(apiError);
+
+      // 错误语义映射
+      let status = 500;
+      const errCode = err?.code;
+      const axiosStatus = err?.response?.status;
+      if (errCode === 'NOT_FOUND') {
+        status = 404;
+        apiError.code = 'AGENT_NOT_FOUND';
+      } else if (errCode === 'INVALID_PROVIDER' || errCode === 'INVALID_APP_ID') {
+        status = 400;
+        apiError.code = errCode;
+      } else if (axiosStatus === 404) {
+        status = 502;
+        apiError.code = 'UPSTREAM_NOT_FOUND';
+      } else if (axiosStatus === 401) {
+        status = 401;
+        apiError.code = 'UPSTREAM_UNAUTHORIZED';
+      } else if (axiosStatus === 408) {
+        status = 504;
+        apiError.code = 'UPSTREAM_TIMEOUT';
+      }
+
+      res.status(status).json(apiError);
     }
   };
 
@@ -697,14 +709,33 @@ export class ChatController {
         data: detail,
         timestamp: new Date().toISOString(),
       });
-    } catch (err) {
+    } catch (err: any) {
       console.error('获取聊天历史失败:', err);
       const apiError: ApiError = {
         code: 'GET_HISTORY_FAILED',
         message: err instanceof Error ? err.message : '获取聊天历史失败',
         timestamp: new Date().toISOString(),
       };
-      res.status(500).json(apiError);
+      let status = 500;
+      const errCode = err?.code;
+      const axiosStatus = err?.response?.status;
+      if (errCode === 'NOT_FOUND') {
+        status = 404;
+        apiError.code = 'AGENT_NOT_FOUND';
+      } else if (errCode === 'INVALID_PROVIDER' || errCode === 'INVALID_APP_ID') {
+        status = 400;
+        apiError.code = errCode;
+      } else if (axiosStatus === 404) {
+        status = 502;
+        apiError.code = 'UPSTREAM_NOT_FOUND';
+      } else if (axiosStatus === 401) {
+        status = 401;
+        apiError.code = 'UPSTREAM_UNAUTHORIZED';
+      } else if (axiosStatus === 408) {
+        status = 504;
+        apiError.code = 'UPSTREAM_TIMEOUT';
+      }
+      res.status(status).json(apiError);
     }
   };
 
@@ -741,14 +772,33 @@ export class ChatController {
       await this.fastgptSessionService.deleteHistory(agentId, chatId);
 
       res.json({ success: true, data: null, timestamp: new Date().toISOString() });
-    } catch (err) {
+    } catch (err: any) {
       console.error('删除聊天历史失败:', err);
       const apiError: ApiError = {
         code: 'DELETE_HISTORY_FAILED',
         message: err instanceof Error ? err.message : '删除聊天历史失败',
         timestamp: new Date().toISOString(),
       };
-      res.status(500).json(apiError);
+      let status = 500;
+      const errCode = err?.code;
+      const axiosStatus = err?.response?.status;
+      if (errCode === 'NOT_FOUND') {
+        status = 404;
+        apiError.code = 'AGENT_NOT_FOUND';
+      } else if (errCode === 'INVALID_PROVIDER' || errCode === 'INVALID_APP_ID') {
+        status = 400;
+        apiError.code = errCode;
+      } else if (axiosStatus === 404) {
+        status = 502;
+        apiError.code = 'UPSTREAM_NOT_FOUND';
+      } else if (axiosStatus === 401) {
+        status = 401;
+        apiError.code = 'UPSTREAM_UNAUTHORIZED';
+      } else if (axiosStatus === 408) {
+        status = 504;
+        apiError.code = 'UPSTREAM_TIMEOUT';
+      }
+      res.status(status).json(apiError);
     }
   };
 
@@ -773,14 +823,33 @@ export class ChatController {
       await this.fastgptSessionService.clearHistories(agentId);
 
       res.json({ success: true, data: null, timestamp: new Date().toISOString() });
-    } catch (err) {
+    } catch (err: any) {
       console.error('清空聊天历史失败:', err);
       const apiError: ApiError = {
         code: 'CLEAR_HISTORY_FAILED',
         message: err instanceof Error ? err.message : '清空聊天历史失败',
         timestamp: new Date().toISOString(),
       };
-      res.status(500).json(apiError);
+      let status = 500;
+      const errCode = err?.code;
+      const axiosStatus = err?.response?.status;
+      if (errCode === 'NOT_FOUND') {
+        status = 404;
+        apiError.code = 'AGENT_NOT_FOUND';
+      } else if (errCode === 'INVALID_PROVIDER' || errCode === 'INVALID_APP_ID') {
+        status = 400;
+        apiError.code = errCode;
+      } else if (axiosStatus === 404) {
+        status = 502;
+        apiError.code = 'UPSTREAM_NOT_FOUND';
+      } else if (axiosStatus === 401) {
+        status = 401;
+        apiError.code = 'UPSTREAM_UNAUTHORIZED';
+      } else if (axiosStatus === 408) {
+        status = 504;
+        apiError.code = 'UPSTREAM_TIMEOUT';
+      }
+      res.status(status).json(apiError);
     }
   };
 

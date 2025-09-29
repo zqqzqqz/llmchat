@@ -26,6 +26,7 @@
     "allowUnreachableCode": false,
     "exactOptionalPropertyTypes": true,
     "baseUrl": "./src",
+
     "paths": {
       "@/*": ["*"],
       "@/types/*": ["types/*"],

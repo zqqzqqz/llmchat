@@ -7,33 +7,12 @@ exports.ChatLogService = void 0;
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
 const db_1 = require("@/utils/db");
-function stripComments(input) {
-    const withoutBlock = input.replace(/\/\*[\s\S]*?\*\//g, '');
-    return withoutBlock.replace(/(^|\s)\/\/.*$/gm, '');
-}
-function tryLoadAppConfig() {
-    const root = path_1.default.resolve(__dirname, '../../..');
-    const candidates = [
-        path_1.default.join(root, 'config', 'config.jsonc'),
-        path_1.default.join(root, 'config', 'config.json'),
-    ];
-    for (const p of candidates) {
-        try {
-            if (fs_1.default.existsSync(p)) {
-                const raw = fs_1.default.readFileSync(p, 'utf-8');
-                const json = JSON.parse(stripComments(raw));
-                return json;
-            }
-        }
-        catch (e) {
-            console.warn('[ChatLogService] 解析配置失败:', p, e);
-        }
-    }
-    return {};
-}
+const appConfig_1 = require("@/utils/appConfig");
+const ObservabilityDispatcher_1 = require("@/services/ObservabilityDispatcher");
 class ChatLogService {
     constructor() {
-        const cfg = tryLoadAppConfig();
+        this.observability = ObservabilityDispatcher_1.ObservabilityDispatcher.getInstance();
+        const cfg = (0, appConfig_1.loadAppConfig)();
         const cfgLog = cfg.logging || {};
         this.enabled =
             cfgLog.enabled ?? ((process.env.LOG_CHAT_RESPONSES ?? 'true') === 'true');
@@ -102,6 +81,17 @@ class ChatLogService {
         };
         this.appendFile(entry);
         this.appendDb('INFO', JSON.stringify(entry));
+        this.pushObservability('normal', 'INFO', {
+            agentId: params.agentId,
+            provider: params.provider,
+            endpoint: params.endpoint,
+            payload: {
+                requestMeta: params.requestMeta,
+                rawResponse: this.includeRaw ? params.rawResponse ?? null : null,
+                normalizedResponse: this.includeNormalized ? params.normalizedResponse ?? null : null,
+            },
+            timestamp: entry.timestamp,
+        });
     }
     logStreamEvent(params) {
         if (!this.enabled || !this.recordStream)
@@ -120,6 +110,49 @@ class ChatLogService {
         {
             const level = params.eventType === 'error' ? 'ERROR' : 'INFO';
             this.appendDb(level, JSON.stringify(entry));
+            const obsPayload = {
+                agentId: params.agentId,
+                payload: params.data ?? null,
+                timestamp: entry.timestamp,
+            };
+            if (params.provider)
+                obsPayload.provider = params.provider;
+            if (params.endpoint)
+                obsPayload.endpoint = params.endpoint;
+            if (params.chatId)
+                obsPayload.chatId = params.chatId;
+            if (params.eventType)
+                obsPayload.eventType = params.eventType;
+            this.pushObservability('stream', level, obsPayload);
+        }
+    }
+    pushObservability(channel, level, payload) {
+        try {
+            if (!this.observability.isEnabled())
+                return;
+            const event = {
+                timestamp: payload.timestamp,
+                channel,
+                level,
+                agentId: payload.agentId,
+                payload: payload.payload ?? null,
+            };
+            if (payload.provider) {
+                event.provider = payload.provider;
+            }
+            if (payload.endpoint) {
+                event.endpoint = payload.endpoint;
+            }
+            if (payload.chatId) {
+                event.chatId = payload.chatId;
+            }
+            if (payload.eventType) {
+                event.eventType = payload.eventType;
+            }
+            this.observability.enqueue(event);
+        }
+        catch (error) {
+            console.warn('[ChatLogService] 推送观测事件失败:', error);
         }
     }
 }

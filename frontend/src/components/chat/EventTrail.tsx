@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { FastGPTEvent } from '@/types';
 import { Info, CheckCircle2, AlertTriangle, AlertCircle } from 'lucide-react';
 import clsx from 'clsx';
+import { getNormalizedEventKey, isToolEvent } from '@/lib/fastgptEvents';
 
 interface EventTrailProps {
   events: FastGPTEvent[];
@@ -47,22 +48,30 @@ export const EventTrail: React.FC<EventTrailProps> = ({ events }) => {
     return null;
   }
 
+  // 仅保留：节点响应(flowResponses) 与 工具事件
+  const filteredEvents = useMemo(() => {
+    return (events || []).filter((e) => {
+      const key = getNormalizedEventKey(e.name || '');
+      return key === getNormalizedEventKey('flowResponses') || isToolEvent(e.name || '');
+    });
+  }, [events]);
+
   const [visibleCount, setVisibleCount] = useState(() =>
-    Math.min(events.length, INITIAL_VISIBLE_EVENTS)
+    Math.min(filteredEvents.length, INITIAL_VISIBLE_EVENTS)
   );
 
   useEffect(() => {
-    setVisibleCount(Math.min(events.length, INITIAL_VISIBLE_EVENTS));
-  }, [events.length]);
+    setVisibleCount(Math.min(filteredEvents.length, INITIAL_VISIBLE_EVENTS));
+  }, [filteredEvents.length]);
 
   const visibleEvents = useMemo(() => {
-    if (events.length <= visibleCount) {
-      return events;
+    if (filteredEvents.length <= visibleCount) {
+      return filteredEvents;
     }
-    return events.slice(events.length - visibleCount);
-  }, [events, visibleCount]);
+    return filteredEvents.slice(filteredEvents.length - visibleCount);
+  }, [filteredEvents, visibleCount]);
 
-  const hiddenCount = Math.max(events.length - visibleEvents.length, 0);
+  const hiddenCount = Math.max(filteredEvents.length - visibleEvents.length, 0);
 
   return (
     <div className="mb-3 space-y-2">
@@ -101,6 +110,11 @@ export const EventTrail: React.FC<EventTrailProps> = ({ events }) => {
                 {event.summary && (
                   <p className="text-xs text-muted-foreground leading-relaxed">{event.summary}</p>
                 )}
+                {event.detail && (
+                  <p className="text-[11px] text-muted-foreground/90 leading-relaxed whitespace-pre-line">
+                    {event.detail}
+                  </p>
+                )}
                 <details className="group text-[11px] text-muted-foreground/80">
                   <summary className="cursor-pointer select-none text-[11px] font-medium text-muted-foreground/90 transition-colors hover:text-foreground">
                     查看原始数据
@@ -117,11 +131,11 @@ export const EventTrail: React.FC<EventTrailProps> = ({ events }) => {
         })}
       </ul>
 
-      {events.length > INITIAL_VISIBLE_EVENTS && visibleCount === events.length && (
+      {filteredEvents.length > INITIAL_VISIBLE_EVENTS && visibleCount === filteredEvents.length && (
         <div className="flex justify-center">
           <button
             type="button"
-            onClick={() => setVisibleCount(Math.min(events.length, INITIAL_VISIBLE_EVENTS))}
+            onClick={() => setVisibleCount(Math.min(filteredEvents.length, INITIAL_VISIBLE_EVENTS))}
             className="rounded-full border border-border/70 px-3 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:border-brand hover:text-brand"
           >
             收起事件时间线

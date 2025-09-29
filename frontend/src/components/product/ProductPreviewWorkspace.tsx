@@ -18,6 +18,27 @@ interface BoundingBox {
   height: number;
 }
 
+type ResizeDirection = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+
+const RESIZE_HANDLE_POSITION: Record<ResizeDirection, string> = {
+  'top-left': 'left-[-0.5rem] top-[-0.5rem] cursor-nwse-resize',
+  'top-right': 'right-[-0.5rem] top-[-0.5rem] cursor-nesw-resize',
+  'bottom-left': 'left-[-0.5rem] bottom-[-0.5rem] cursor-nesw-resize',
+  'bottom-right': 'right-[-0.5rem] bottom-[-0.5rem] cursor-nwse-resize',
+};
+
+type InteractionState =
+  | { type: 'idle' }
+  | { type: 'creating'; pointerId: number; origin: { x: number; y: number } }
+  | { type: 'moving'; pointerId: number; origin: { x: number; y: number }; boxSnapshot: BoundingBox }
+  | {
+      type: 'resizing';
+      pointerId: number;
+      origin: { x: number; y: number };
+      boxSnapshot: BoundingBox;
+      direction: ResizeDirection;
+    };
+
 const toBase64 = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -29,6 +50,16 @@ const toBase64 = (file: File): Promise<string> =>
     reader.readAsDataURL(file);
   });
 
+const MIN_BOUND_SIZE = 0.02;
+
+const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+
+const isPointWithinBox = (box: BoundingBox, point: { x: number; y: number }) =>
+  point.x >= box.x &&
+  point.x <= box.x + box.width &&
+  point.y >= box.y &&
+  point.y <= box.y + box.height;
+
 export const ProductPreviewWorkspace: React.FC<ProductPreviewWorkspaceProps> = ({ agent }) => {
   const sceneCanvasRef = useRef<HTMLDivElement>(null);
   const [sceneImagePreview, setSceneImagePreview] = useState<string>('');
@@ -36,15 +67,13 @@ export const ProductPreviewWorkspace: React.FC<ProductPreviewWorkspaceProps> = (
   const [productQuery, setProductQuery] = useState('');
   const [personalization, setPersonalization] = useState('');
   const [boundingBox, setBoundingBox] = useState<BoundingBox | null>(null);
-  const [isDrawing, setIsDrawing] = useState(false);
-  const [startPoint, setStartPoint] = useState<{ x: number; y: number } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [generatedImage, setGeneratedImage] = useState<string>('');
+  const [interaction, setInteraction] = useState<InteractionState>({ type: 'idle' });
 
   const resetBoundingBox = useCallback(() => {
     setBoundingBox(null);
-    setStartPoint(null);
-    setIsDrawing(false);
+    setInteraction({ type: 'idle' });
   }, []);
 
   const handleSceneImageChange = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -71,32 +100,133 @@ export const ProductPreviewWorkspace: React.FC<ProductPreviewWorkspaceProps> = (
     return { x, y };
   }, []);
 
-  const handlePointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    if (!sceneImagePreview) return;
-    event.preventDefault();
-    const point = capturePoint(event.clientX, event.clientY);
-    setStartPoint(point);
-    setBoundingBox({ x: point.x, y: point.y, width: 0, height: 0 });
-    setIsDrawing(true);
-    event.currentTarget.setPointerCapture(event.pointerId);
-  }, [capturePoint, sceneImagePreview]);
+  const updateBoundingBoxForResize = useCallback(
+    (direction: ResizeDirection, point: { x: number; y: number }, originBox: BoundingBox) => {
+      const left = originBox.x;
+      const top = originBox.y;
+      const right = originBox.x + originBox.width;
+      const bottom = originBox.y + originBox.height;
 
-  const handlePointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    if (!isDrawing || !startPoint) return;
-    const point = capturePoint(event.clientX, event.clientY);
-    const x = Math.min(startPoint.x, point.x);
-    const y = Math.min(startPoint.y, point.y);
-    const width = Math.abs(point.x - startPoint.x);
-    const height = Math.abs(point.y - startPoint.y);
-    setBoundingBox({ x, y, width, height });
-  }, [capturePoint, isDrawing, startPoint]);
+      let nextLeft = left;
+      let nextTop = top;
+      let nextRight = right;
+      let nextBottom = bottom;
 
-  const handlePointerUp = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    if (!isDrawing) return;
-    event.preventDefault();
-    setIsDrawing(false);
-    event.currentTarget.releasePointerCapture(event.pointerId);
-  }, [isDrawing]);
+      if (direction === 'top-left' || direction === 'bottom-left') {
+        nextLeft = clamp(point.x, 0, right - MIN_BOUND_SIZE);
+      }
+      if (direction === 'top-right' || direction === 'bottom-right') {
+        nextRight = clamp(point.x, left + MIN_BOUND_SIZE, 1);
+      }
+      if (direction === 'top-left' || direction === 'top-right') {
+        nextTop = clamp(point.y, 0, bottom - MIN_BOUND_SIZE);
+      }
+      if (direction === 'bottom-left' || direction === 'bottom-right') {
+        nextBottom = clamp(point.y, top + MIN_BOUND_SIZE, 1);
+      }
+
+      const width = clamp(nextRight - nextLeft, MIN_BOUND_SIZE, 1);
+      const height = clamp(nextBottom - nextTop, MIN_BOUND_SIZE, 1);
+
+      return {
+        x: clamp(nextLeft, 0, 1 - MIN_BOUND_SIZE),
+        y: clamp(nextTop, 0, 1 - MIN_BOUND_SIZE),
+        width,
+        height,
+      };
+    },
+    []
+  );
+
+  const handlePointerDown = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (!sceneImagePreview || event.button !== 0) return;
+
+      const container = event.currentTarget;
+      const point = capturePoint(event.clientX, event.clientY);
+      const target = event.target as HTMLElement;
+      const resizeHandle = (target?.dataset?.resizeHandle as ResizeDirection) || undefined;
+
+      if (boundingBox && resizeHandle) {
+        setInteraction({
+          type: 'resizing',
+          pointerId: event.pointerId,
+          origin: point,
+          boxSnapshot: boundingBox,
+          direction: resizeHandle,
+        });
+        container.setPointerCapture(event.pointerId);
+        event.preventDefault();
+        return;
+      }
+
+      if (boundingBox && isPointWithinBox(boundingBox, point)) {
+        setInteraction({
+          type: 'moving',
+          pointerId: event.pointerId,
+          origin: point,
+          boxSnapshot: boundingBox,
+        });
+        container.setPointerCapture(event.pointerId);
+        event.preventDefault();
+        return;
+      }
+
+      setBoundingBox({ x: point.x, y: point.y, width: 0, height: 0 });
+      setInteraction({ type: 'creating', pointerId: event.pointerId, origin: point });
+      container.setPointerCapture(event.pointerId);
+      event.preventDefault();
+    },
+    [boundingBox, capturePoint, sceneImagePreview]
+  );
+
+  const handlePointerMove = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (interaction.type === 'idle') return;
+
+      const point = capturePoint(event.clientX, event.clientY);
+
+      if (interaction.type === 'creating') {
+        const { origin } = interaction;
+        const x = Math.min(origin.x, point.x);
+        const y = Math.min(origin.y, point.y);
+        const width = Math.abs(point.x - origin.x);
+        const height = Math.abs(point.y - origin.y);
+        setBoundingBox({ x, y, width, height });
+        return;
+      }
+
+      if (interaction.type === 'moving') {
+        const { origin, boxSnapshot } = interaction;
+        const deltaX = point.x - origin.x;
+        const deltaY = point.y - origin.y;
+        const nextWidth = boxSnapshot.width;
+        const nextHeight = boxSnapshot.height;
+        const nextX = clamp(boxSnapshot.x + deltaX, 0, 1 - nextWidth);
+        const nextY = clamp(boxSnapshot.y + deltaY, 0, 1 - nextHeight);
+        setBoundingBox({ x: nextX, y: nextY, width: nextWidth, height: nextHeight });
+        return;
+      }
+
+      if (interaction.type === 'resizing') {
+        const { direction, boxSnapshot } = interaction;
+        const next = updateBoundingBoxForResize(direction, point, boxSnapshot);
+        setBoundingBox(next);
+      }
+    },
+    [capturePoint, interaction, updateBoundingBoxForResize]
+  );
+
+  const releaseInteraction = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (interaction.type === 'idle') return;
+      if ((event.currentTarget as HTMLDivElement).hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+      setInteraction({ type: 'idle' });
+    },
+    [interaction.type]
+  );
 
   const boundingBoxStyle = useMemo(() => {
     if (!boundingBox) return undefined;
@@ -108,7 +238,14 @@ export const ProductPreviewWorkspace: React.FC<ProductPreviewWorkspaceProps> = (
     } as React.CSSProperties;
   }, [boundingBox]);
 
-  const canSubmit = !!sceneImagePreview && !!productQuery && boundingBox && boundingBox.width > 0.02 && boundingBox.height > 0.02;
+  const canSubmit =
+    !!sceneImagePreview &&
+    !!productQuery &&
+    boundingBox &&
+    boundingBox.width > MIN_BOUND_SIZE &&
+    boundingBox.height > MIN_BOUND_SIZE;
+
+  const isCreating = interaction.type === 'creating';
 
   const handleSubmit = useCallback(async () => {
     if (!sceneImagePreview || !boundingBox) {
@@ -187,7 +324,7 @@ export const ProductPreviewWorkspace: React.FC<ProductPreviewWorkspaceProps> = (
                 {sceneImagePreview && (
                   <div>
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm text-muted-foreground">请按住鼠标或手指拖拽，标记红框区域</span>
+                      <span className="text-sm text-muted-foreground">拖动鼠标或手指标记红框，可在生成后继续拖动或缩放调整</span>
                       <Button variant="ghost" size="sm" onClick={resetBoundingBox}>
                         <RefreshCcw className="h-4 w-4 mr-2" /> 重新标记
                       </Button>
@@ -198,18 +335,37 @@ export const ProductPreviewWorkspace: React.FC<ProductPreviewWorkspaceProps> = (
                       style={{ backgroundImage: `url(${sceneImagePreview})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
                       onPointerDown={handlePointerDown}
                       onPointerMove={handlePointerMove}
-                      onPointerUp={handlePointerUp}
-                      onPointerLeave={handlePointerUp}
-                      onPointerCancel={handlePointerUp}
+                      onPointerUp={releaseInteraction}
+                      onPointerLeave={releaseInteraction}
+                      onPointerCancel={releaseInteraction}
                     >
                       {boundingBox && (
                         <div
                           className={cn(
                             'absolute border-[3px] border-red-500 bg-red-500/20 rounded-md shadow-lg transition-all duration-75',
-                            isDrawing ? 'animate-pulse' : ''
+                            isCreating ? 'animate-pulse' : 'cursor-move'
                           )}
                           style={boundingBoxStyle}
-                        />
+                          data-bounding-box="true"
+                        >
+                          <div className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 text-xs font-medium text-white/90 bg-red-500/80 backdrop-blur rounded-full px-3 py-1 shadow-sm">
+                            拖动红框移动，拖四角微调范围
+                          </div>
+                          {(['top-left', 'top-right', 'bottom-left', 'bottom-right'] as ResizeDirection[]).map((direction) => {
+                            const baseClass =
+                              'absolute w-4 h-4 rounded-full border-[2px] border-white bg-red-500 shadow-md transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-red-400';
+
+                            return (
+                              <button
+                                key={direction}
+                                type="button"
+                                data-resize-handle={direction}
+                                className={cn(baseClass, RESIZE_HANDLE_POSITION[direction], 'pointer-events-auto')}
+                                aria-label="调整红框"
+                              />
+                            );
+                          })}
+                        </div>
                       )}
                       {!boundingBox && (
                         <div className="absolute inset-0 flex items-center justify-center">
@@ -277,7 +433,8 @@ export const ProductPreviewWorkspace: React.FC<ProductPreviewWorkspaceProps> = (
                 <p className="font-medium mb-1">标记技巧提示：</p>
                 <ul className="list-disc list-inside space-y-1">
                   <li>确保红框覆盖完整的摆放区域，适当留出边距以便 AI 理解空间关系。</li>
-                  <li>如需更精确，可多次重新标记；红框太小会影响生成效果。</li>
+                  <li>拖动红框本体可快速移动，拖动四角圆点可微调大小与比例。</li>
+                  <li>如需重新绘制，可点击「重新标记」或在空白处重新拖拽。</li>
                   <li>提交后系统会保留思维链步骤，可在对话区查看生成历程。</li>
                 </ul>
               </div>

@@ -154,4 +154,50 @@ export interface FastGPTInitResponse {
         pluginInputs: any[];
     };
 }
+export interface FastGPTChatHistorySummary {
+    chatId: string;
+    appId?: string | undefined;
+    title: string;
+    createdAt: string;
+    updatedAt: string;
+    messageCount?: number | undefined;
+    tags?: string[] | undefined;
+    raw?: any;
+}
+export interface FastGPTChatHistoryMessage {
+    id?: string | undefined;
+    dataId?: string | undefined;
+    role: 'user' | 'assistant' | 'system';
+    content: string;
+    feedback?: 'good' | 'bad' | null | undefined;
+    raw?: any;
+}
+export interface FastGPTChatHistoryDetail {
+    chatId: string;
+    appId?: string | undefined;
+    title?: string | undefined;
+    messages: FastGPTChatHistoryMessage[];
+    metadata?: Record<string, any> | undefined;
+}
+export interface ProductPreviewBoundingBox {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+}
+export interface ProductPreviewRequest {
+    sceneImage: string;
+    productImage?: string;
+    productQuery: string;
+    personalization?: string;
+    boundingBox: ProductPreviewBoundingBox;
+}
+export interface ProductPreviewResult {
+    requestId?: string;
+    traceId?: string;
+    previewImage?: string;
+    imageUrl?: string;
+    status?: string;
+    raw?: any;
+}
 //# sourceMappingURL=index.d.ts.map

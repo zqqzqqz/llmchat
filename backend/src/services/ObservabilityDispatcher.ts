@@ -1,4 +1,4 @@
-import axios, { AxiosRequestConfig } from 'axios';
+import axios from 'axios';
 import type { AppConfig, LoggingExporterConfig } from '@/utils/appConfig';
 import { loadAppConfig, resolveLoggingExportersFromEnv } from '@/utils/appConfig';
 
@@ -120,7 +120,7 @@ export class ObservabilityDispatcher {
   }
 
   private async sendToHttp(exporter: RuntimeExporter, events: ObservabilityEvent[]): Promise<void> {
-    const config: AxiosRequestConfig<{ events: ObservabilityEvent[] }> | undefined = exporter.headers
+    const config: Parameters<typeof axios.post>[2] | undefined = exporter.headers
       ? { headers: exporter.headers }
       : undefined;
     await axios.post(exporter.endpoint!, { events }, config);
@@ -142,7 +142,7 @@ export class ObservabilityDispatcher {
     if (exporter.apiKey) {
       headers.Authorization = `ApiKey ${exporter.apiKey}`;
     }
-    const config: AxiosRequestConfig<string> = { headers };
+    const config: Parameters<typeof axios.post>[2] = { headers };
     if (exporter.username || exporter.password) {
       config.auth = { username: exporter.username ?? '', password: exporter.password ?? '' };
     }
@@ -157,7 +157,7 @@ export class ObservabilityDispatcher {
       'Content-Type': 'application/json',
       ...(exporter.headers ?? {}),
     };
-    const config: AxiosRequestConfig<string> = { headers };
+    const config: Parameters<typeof axios.post>[2] = { headers };
     if (exporter.username || exporter.password) {
       config.auth = { username: exporter.username ?? '', password: exporter.password ?? '' };
     }

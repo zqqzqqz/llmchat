@@ -17,10 +17,20 @@
     "backend:test": "cd backend && npm test",
     "frontend:test": "cd frontend && npm test"
   },
-  "keywords": ["llm", "chat", "ai", "agent", "switching", "react", "typescript", "node"],
+  "keywords": [
+    "llm",
+    "chat",
+    "ai",
+    "agent",
+    "switching",
+    "react",
+    "typescript",
+    "node"
+  ],
   "author": "AI Developer",
   "license": "MIT",
   "devDependencies": {
+    "@playwright/test": "^1.55.1",
     "concurrently": "^8.2.2"
   },
   "workspaces": [

@@ -52,9 +52,9 @@ export class ProductPreviewController {
         timestamp: new Date().toISOString(),
       });
     } catch (err: any) {
-      console.error('调用阿里图片生成接口失败:', err);
+      console.error('调用豆包图片生成接口失败:', err);
       const apiError: ApiError = {
-        code: 'ALI_IMAGE_GENERATE_FAILED',
+        code: 'DOUBAO_IMAGE_GENERATE_FAILED',
         message: err?.response?.data?.message || err?.message || '生成现场预览失败',
         timestamp: new Date().toISOString(),
         details: process.env.NODE_ENV === 'development' ? err?.response?.data || err : undefined,

@@ -105,6 +105,7 @@ interface ChatState {
   bindSessionId: (oldId: string, newId: string) => void;
   setSessionMessages: (sessionId: string, messages: ChatMessage[]) => void;
   updateMessageById: (messageId: string, updater: (message: ChatMessage) => ChatMessage) => void;
+  removeLastInteractiveMessage: () => void;
 }
 
 export const useChatStore = create<ChatState>()(
@@ -220,6 +221,24 @@ export const useChatStore = create<ChatState>()(
           }
           
           return { messages: updatedMessages };
+        }),
+
+      // 移除最后一个交互气泡（提交后隐藏交互UI）
+      removeLastInteractiveMessage: () =>
+        set((state) => {
+          let idx = -1;
+          for (let i = state.messages.length - 1; i >= 0; i -= 1) {
+            const msg = state.messages[i] as any;
+            if (msg && msg.interactive !== undefined) {
+              idx = i;
+              break;
+            }
+          }
+
+          if (idx === -1) return state;
+
+          const messages = state.messages.filter((_, i) => i !== idx);
+          return syncMessagesWithSession(state, messages);
         }),
 
       // 更新最后一条消息（流式响应）- 修复实时更新问题
@@ -355,16 +374,52 @@ export const useChatStore = create<ChatState>()(
             }
 
             const existingEvents = msg.events ?? [];
-            if (existingEvents.some((item) => item.id === event.id)) {
-              return msg;
+
+            const mergePayload = (prev: any, incoming: any) => {
+              if (prev && incoming && typeof prev === 'object' && typeof incoming === 'object') {
+                return { ...prev, ...incoming };
+              }
+              return incoming ?? prev;
+            };
+
+            const mergeEvent = (prevEvent: FastGPTEvent, incomingEvent: FastGPTEvent): FastGPTEvent => ({
+              ...prevEvent,
+              ...incomingEvent,
+              summary: incomingEvent.summary ?? prevEvent.summary,
+              detail: incomingEvent.detail ?? prevEvent.detail,
+              level: incomingEvent.level ?? prevEvent.level,
+              payload: mergePayload(prevEvent.payload, incomingEvent.payload),
+              timestamp: incomingEvent.timestamp ?? prevEvent.timestamp,
+              stage: incomingEvent.stage ?? prevEvent.stage,
+            });
+
+            const groupIndex = event.groupId
+              ? existingEvents.findIndex((item) => item.groupId === event.groupId)
+              : -1;
+            const idIndex = existingEvents.findIndex((item) => item.id === event.id);
+
+            let nextEvents = existingEvents;
+
+            if (groupIndex !== -1) {
+              const merged = mergeEvent(existingEvents[groupIndex], event);
+              nextEvents = [...existingEvents];
+              nextEvents[groupIndex] = merged;
+            } else if (idIndex !== -1) {
+              const merged = mergeEvent(existingEvents[idIndex], event);
+              nextEvents = [...existingEvents];
+              nextEvents[idIndex] = merged;
+            } else if (event.stage === 'update' && event.groupId) {
+              nextEvents = [...existingEvents, event];
+            } else {
+              const isDuplicate = existingEvents.some((item) => !item.groupId && !event.groupId && item.name === event.name && item.summary === event.summary);
+              if (isDuplicate) {
+                nextEvents = existingEvents;
+              } else {
+                nextEvents = [...existingEvents, event];
+              }
             }
 
-            const dedupeKey = `${event.name}-${event.summary ?? ''}`;
-            if (existingEvents.some((item) => `${item.name}-${item.summary ?? ''}` === dedupeKey)) {
-              return msg;
-            }
-
-            const nextEvents = [...existingEvents, event]
+            nextEvents = nextEvents
               .sort((a, b) => a.timestamp - b.timestamp)
               .slice(-10);
 

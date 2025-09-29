@@ -26,6 +26,15 @@ import {
   isUsageEvent,
 } from '@/lib/fastgptEvents';
 
+// API响应通用接口
+export interface ApiResponse<T = any> {
+  success: boolean;
+  data: T;
+  message?: string;
+  code?: string;
+  timestamp: string;
+}
+
 export const api = axios.create({
   baseURL: '/api',
   timeout: 30000,
@@ -355,19 +364,19 @@ const consumeChatSSEStream = async (
 
 export const agentService = {
   async getAgents(): Promise<Agent[]> {
-    const response = await api.get('/agents');
+    const response = await api.get<ApiResponse<Agent[]>>('/agents');
     return response.data.data;
   },
 
   async getAgent(id: string): Promise<Agent> {
-    const response = await api.get(`/agents/${id}`);
+    const response = await api.get<ApiResponse<Agent>>(`/agents/${id}`);
     return response.data.data;
   },
 
   async checkAgentStatus(id: string) {
     debugLog('检查智能体状态:', id);
     try {
-      const response = await api.get(`/agents/${id}/status`);
+      const response = await api.get<ApiResponse>(`/agents/${id}/status`);
       debugLog('智能体状态响应:', response.data);
       return response.data.data;
     } catch (error) {
@@ -383,7 +392,7 @@ export const chatService = {
     messages: OriginalChatMessage[],
     options?: ChatOptions
   ): Promise<ChatResponse> {
-    const response = await api.post('/chat/completions', {
+    const response = await api.post<ApiResponse<ChatResponse>>('/chat/completions', {
       agentId,
       messages,
       stream: false,
@@ -459,7 +468,7 @@ export const chatService = {
 
   // ===== 新增：初始化开场白（非流式） =====
   async init(agentId: string, chatId?: string): Promise<any> {
-    const response = await api.get('/chat/init', {
+    const response = await api.get<ApiResponse>('/chat/init', {
       params: {
         appId: agentId,
         ...(chatId ? { chatId } : {}),
@@ -543,12 +552,12 @@ export const chatService = {
   },
 
   async listHistories(agentId: string): Promise<FastGPTChatHistorySummary[]> {
-    const response = await api.get('/chat/history', { params: { agentId } });
+    const response = await api.get<ApiResponse<FastGPTChatHistorySummary[]>>('/chat/history', { params: { agentId } });
     return response.data.data;
   },
 
   async getHistoryDetail(agentId: string, chatId: string): Promise<FastGPTChatHistoryDetail> {
-    const response = await api.get(`/chat/history/${chatId}`, { params: { agentId } });
+    const response = await api.get<ApiResponse<FastGPTChatHistoryDetail>>(`/chat/history/${chatId}`, { params: { agentId } });
     return response.data.data;
   },
 
@@ -576,7 +585,7 @@ export const chatService = {
       payload.detail = options.detail;
     }
 
-    const response = await api.post(`/chat/history/${chatId}/retry`, payload);
+    const response = await api.post<ApiResponse<ChatResponse>>(`/chat/history/${chatId}/retry`, payload);
     return response.data.data;
   },
 
@@ -641,7 +650,7 @@ export const chatService = {
 
 export const productPreviewService = {
   async generatePreview(payload: ProductPreviewRequest): Promise<ProductPreviewResponse> {
-    const response = await api.post('/product-preview/generate', payload);
+    const response = await api.post<ApiResponse<ProductPreviewResponse>>('/product-preview/generate', payload);
     return response.data.data;
   },
 };
