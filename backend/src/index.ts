@@ -3,11 +3,13 @@ import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
 import dotenv from 'dotenv';
+import path from 'path';
 
 import { agentRoutes } from '@/routes/agents';
 import { chatRoutes } from '@/routes/chat';
 import { authRoutes } from '@/routes/auth';
 import { adminRoutes } from '@/routes/admin';
+import { productPreviewRoutes } from '@/routes/productPreview';
 import { errorHandler } from '@/middleware/errorHandler';
 import { requestLogger } from '@/middleware/requestLogger';
 import { rateLimiter } from '@/middleware/rateLimiter';
@@ -60,6 +62,10 @@ app.use(compression({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// 静态资源：附件上传目录
+const uploadsDir = path.resolve(__dirname, '../uploads');
+app.use('/uploads', express.static(uploadsDir));
+
 // 请求日志
 app.use(requestLogger);
 
@@ -81,6 +87,7 @@ app.use('/api/agents', agentRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/product-preview', productPreviewRoutes);
 
 // 404处理
 app.use('*', (req, res) => {

@@ -2,10 +2,14 @@ import { useState, useCallback, useRef } from 'react';
 import { agentService } from '@/services/api';
 import { useChatStore } from '@/store/chatStore';
 
+import { useI18n } from '@/i18n';
+
+
 export const useAgents = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const { t } = useI18n();
   
   const { 
     setAgents, 
@@ -29,7 +33,15 @@ export const useAgents = () => {
     setAgentsError(null);
 
     try {
-      const agents = await agentService.getAgents();
+      const fetchedAgents = await agentService.getAgents();
+
+      const hasProductPreview = fetchedAgents.some((agent) => agent.id === PRODUCT_PREVIEW_AGENT_ID);
+      const hasVoiceCall = fetchedAgents.some((agent) => agent.id === VOICE_CALL_AGENT_ID);
+      const agents = [
+        ...fetchedAgents,
+        ...(hasProductPreview ? [] : [PRODUCT_PREVIEW_AGENT]),
+        ...(hasVoiceCall ? [] : [VOICE_CALL_AGENT]),
+      ];
       
       // 检查请求是否被取消
       if (abortControllerRef.current?.signal.aborted) {
@@ -51,14 +63,14 @@ export const useAgents = () => {
         return;
       }
       
-      const errorMessage = err instanceof Error ? err.message : '获取智能体列表失败';
+      const errorMessage = err instanceof Error ? err.message : t('获取智能体列表失败');
       setError(errorMessage);
       setAgentsError(errorMessage);
     } finally {
       setLoading(false);
       setAgentsLoading(false);
     }
-  }, [currentAgent, setAgents, setAgentsLoading, setAgentsError, setCurrentAgent]);
+  }, [currentAgent, setAgents, setAgentsLoading, setAgentsError, setCurrentAgent, t]);
 
   return {
     loading,

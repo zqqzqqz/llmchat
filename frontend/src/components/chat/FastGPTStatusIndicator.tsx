@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Bot, Database, Workflow, CheckCircle, Circle, AlertCircle } from 'lucide-react';
 import { Agent, StreamStatus } from '@/types';
 
+import { useI18n } from '@/i18n';
+
 interface FastGPTStatusIndicatorProps {
   isStreaming: boolean;
   currentStatus?: StreamStatus;
@@ -21,6 +23,7 @@ export const FastGPTStatusIndicator: React.FC<FastGPTStatusIndicatorProps> = ({
 }) => {
   const [knowledgeStatus, setKnowledgeStatus] = useState<'ready' | 'loading' | 'error'>('loading');
   const [contextStatus, setContextStatus] = useState<'active' | 'inactive'>('inactive');
+  const { t } = useI18n();
 
   // 检查 FastGPT 特有状态
   useEffect(() => {
@@ -31,7 +34,9 @@ export const FastGPTStatusIndicator: React.FC<FastGPTStatusIndicatorProps> = ({
 
   const checkFastGPTStatus = async () => {
     try {
-      console.log('检查 FastGPT 状态 for agent:', agent.id);
+
+      console.log(t('检查 FastGPT 状态'), agent.id);
+
       // 简化状态检查逻辑，直接设置为就绪状态
       // 如果需要实际状态检查，可以调用后端接口
       setContextStatus('active');
@@ -41,12 +46,14 @@ export const FastGPTStatusIndicator: React.FC<FastGPTStatusIndicatorProps> = ({
       const response = await fetch(`/api/agents/${agent.id}`);
       if (response.ok) {
         const agentData = await response.json();
-        console.log('FastGPT 智能体数据:', agentData);
+
+        console.log(t('FastGPT 智能体数据'), agentData);
+
         setContextStatus(agentData.data?.isActive ? 'active' : 'inactive');
         setKnowledgeStatus('ready');
       }
     } catch (error) {
-      console.warn('FastGPT 状态检查失败:', error);
+      console.warn(t('FastGPT 状态检查失败'), error);
       // 设置为基本可用状态
       setContextStatus('active');
       setKnowledgeStatus('ready');
@@ -58,7 +65,7 @@ export const FastGPTStatusIndicator: React.FC<FastGPTStatusIndicatorProps> = ({
     return null;
   }
   
-  console.log('FastGPT 状态指示器渲染:', {
+  debugLog('FastGPT 状态指示器渲染:', {
     isStreaming,
     currentStatus,
     moduleHistory: moduleHistory.length,
@@ -93,17 +100,27 @@ export const FastGPTStatusIndicator: React.FC<FastGPTStatusIndicatorProps> = ({
         <div className="flex items-center gap-4 text-sm">
           <div className={`flex items-center gap-2 ${contextStatus === 'active' ? 'text-brand' : 'text-muted-foreground'}`}>
             <Bot className="h-4 w-4" />
-            <span>上下文: {contextStatus === 'active' ? '激活' : '未激活'}</span>
+            <span>
+              {t('上下文: {status}', {
+                status: contextStatus === 'active' ? t('激活') : t('未激活'),
+              })}
+            </span>
           </div>
           <div className={`flex items-center gap-2 ${
             knowledgeStatus === 'ready' ? 'text-brand' :
             knowledgeStatus === 'error' ? 'text-red-500' : 'text-yellow-500'
           }`}>
             <Database className="h-4 w-4" />
-            <span>知识库: {
-              knowledgeStatus === 'ready' ? '就绪' : 
-              knowledgeStatus === 'error' ? '错误' : '加载中'
-            }</span>
+            <span>
+              {t('知识库: {status}', {
+                status:
+                  knowledgeStatus === 'ready'
+                    ? t('就绪')
+                    : knowledgeStatus === 'error'
+                      ? t('错误')
+                      : t('加载中'),
+              })}
+            </span>
           </div>
         </div>
       </div>
@@ -116,7 +133,9 @@ export const FastGPTStatusIndicator: React.FC<FastGPTStatusIndicatorProps> = ({
               <Workflow className="h-4 w-4 text-blue-500" />
             </div>
             <span className="text-sm font-medium text-foreground">
-              正在执行: {currentStatus.moduleName || '准备中...'}
+              {t('正在执行: {module}', {
+                module: currentStatus.moduleName || t('准备中...'),
+              })}
             </span>
           </div>
         </div>
@@ -126,7 +145,7 @@ export const FastGPTStatusIndicator: React.FC<FastGPTStatusIndicatorProps> = ({
       {moduleHistory.length > 0 && (
         <div className="module-history">
           <div className="text-xs font-medium text-muted-foreground mb-2">
-            执行历史
+            {t('执行历史')}
           </div>
           <div className="space-y-1">
             {moduleHistory.map((status, index) => (
@@ -142,7 +161,7 @@ export const FastGPTStatusIndicator: React.FC<FastGPTStatusIndicatorProps> = ({
                   status.status === 'error' ? 'text-red-600' :
                   'text-foreground'
                 }`}>
-                  {status.moduleName || '未知模块'}
+                  {status.moduleName || t('未知模块')}
                 </span>
                 {status.status === 'completed' && (
                   <span className="text-green-600 dark:text-green-400 text-xs">✓</span>
@@ -159,7 +178,7 @@ export const FastGPTStatusIndicator: React.FC<FastGPTStatusIndicatorProps> = ({
       {/* 提示信息 */}
       {!isStreaming && moduleHistory.length === 0 && (
         <div className="text-xs text-muted-foreground text-center py-2">
-          FastGPT 工作流准备就绪
+          {t('FastGPT 工作流准备就绪')}
         </div>
       )}
     </div>

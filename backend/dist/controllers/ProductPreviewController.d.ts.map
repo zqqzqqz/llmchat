@@ -1,0 +1,1 @@
+{"version":3,"file":"ProductPreviewController.d.ts","sourceRoot":"","sources":["../../src/controllers/ProductPreviewController.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,OAAO,EAAE,QAAQ,EAAE,MAAM,SAAS,CAAC;AAK5C,qBAAa,wBAAwB;IACnC,OAAO,CAAC,OAAO,CAAwB;;IAMvC,OAAO,CAAC,cAAc,CAmBnB;IAEH,eAAe,GAAU,KAAK,OAAO,EAAE,KAAK,QAAQ,KAAG,OAAO,CAAC,IAAI,CAAC,CA8BlE;CACH"}

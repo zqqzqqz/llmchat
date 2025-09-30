@@ -12,6 +12,7 @@ const agents_1 = require("@/routes/agents");
 const chat_1 = require("@/routes/chat");
 const auth_1 = require("@/routes/auth");
 const admin_1 = require("@/routes/admin");
+const productPreview_1 = require("@/routes/productPreview");
 const errorHandler_1 = require("@/middleware/errorHandler");
 const requestLogger_1 = require("@/middleware/requestLogger");
 const rateLimiter_1 = require("@/middleware/rateLimiter");
@@ -66,6 +67,7 @@ app.use('/api/agents', agents_1.agentRoutes);
 app.use('/api/chat', chat_1.chatRoutes);
 app.use('/api/auth', auth_1.authRoutes);
 app.use('/api/admin', admin_1.adminRoutes);
+app.use('/api/product-preview', productPreview_1.productPreviewRoutes);
 app.use('*', (req, res) => {
     res.status(404).json({
         code: 'NOT_FOUND',

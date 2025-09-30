@@ -14,7 +14,9 @@
     "include": {
       "raw": true,
       "normalized": true
-    }
+    },
+    // 导出到可观测平台（可选）
+    "exporters": []
   }
   ,
   "database": {
@@ -36,4 +38,3 @@
   }
 
 }
-

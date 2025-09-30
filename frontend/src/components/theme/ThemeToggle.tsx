@@ -4,6 +4,7 @@ import { IconButton } from '@/components/ui/IconButton';
 import { Sun, Moon, Monitor, ChevronDown } from 'lucide-react';
 import { useTheme } from './ThemeProvider';
 import { ThemeMode } from '@/types';
+import { useI18n } from '@/i18n';
 
 interface ThemeToggleProps {
   variant?: 'icon' | 'button' | 'dropdown';
@@ -18,6 +19,7 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({
 }) => {
   const { userPreference, theme, toggleTheme, setTheme, isAutoMode } = useTheme();
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const { t } = useI18n();
 
   const getIcon = (mode: ThemeMode) => {
     const iconSize = size === 'sm' ? 'h-4 w-4' : size === 'lg' ? 'h-6 w-6' : 'h-5 w-5';
@@ -34,17 +36,19 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({
   const getLabel = (mode: ThemeMode) => {
     switch (mode) {
       case 'light':
-        return '浅色模式';
+        return t('浅色模式');
       case 'dark':
-        return '深色模式';
+        return t('深色模式');
       case 'auto':
-        return '自动模式';
+        return t('自动模式');
     }
   };
 
   const getCurrentModeText = () => {
     if (isAutoMode) {
-      return `自动 (当前: ${theme === 'dark' ? '深色' : '浅色'})`;
+      return t('自动 (当前: {mode})', {
+        mode: theme === 'dark' ? t('深色模式') : t('浅色模式'),
+      });
     }
     return getLabel(userPreference);
   };
@@ -64,7 +68,7 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({
         radius="lg"
         className={`${sizeClasses[size]}`}
         title={getCurrentModeText()}
-        aria-label="切换主题"
+        aria-label={t('切换主题')}
       >
         {getIcon(userPreference)}
       </IconButton>
@@ -110,15 +114,15 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({
                     radius="md"
                     className={`w-full justify-start gap-3 px-4 py-2 text-left hover:bg-gradient-to-br hover:from-brand/15 hover:to-brand/5 transition-all duration-200 ${userPreference === mode ? 'bg-brand/10 text-foreground' : 'text-foreground' }`}
                   >
-                    {getIcon(mode)}
-                    <div>
-                      <div className="font-medium">{getLabel(mode)}</div>
-                      {mode === 'auto' && (
-                        <div className="text-xs opacity-75">
-                          根据时间自动切换
-                        </div>
-                      )}
-                    </div>
+                      {getIcon(mode)}
+                      <div>
+                        <div className="font-medium">{getLabel(mode)}</div>
+                        {mode === 'auto' && (
+                          <div className="text-xs opacity-75">
+                          {t('根据时间自动切换')}
+                          </div>
+                        )}
+                      </div>
                     {userPreference === mode && (
                       <div className="ml-auto w-2 h-2 bg-brand rounded-full" />
                     )}
@@ -129,7 +133,9 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({
               {isAutoMode && (
                 <div className="border-t border-gray-200 dark:border-gray-700 px-4 py-2">
                   <div className="text-xs text-gray-500 dark:text-gray-400">
-                    当前: {theme === 'dark' ? '深色模式' : '浅色模式'}
+                    {t('当前: {mode}', {
+                      mode: theme === 'dark' ? t('深色模式') : t('浅色模式'),
+                    })}
                   </div>
                 </div>
               )}
@@ -148,8 +154,10 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({
       size="md"
       radius="lg"
       className={`flex items-center gap-2 border border-white/30 bg-gradient-to-br from-white/15 to-white/5 backdrop-blur-md hover:from-white/25 hover:to-white/10 transition-all duration-500 shadow-xl hover:shadow-2xl ${sizeClasses[size]}`}
-      title={`切换到${getLabel(userPreference === 'light' ? 'dark' : userPreference === 'dark' ? 'auto' : 'light')}`}
-      aria-label="切换主题"
+      title={t('切换到 {mode}', {
+        mode: getLabel(userPreference === 'light' ? 'dark' : userPreference === 'dark' ? 'auto' : 'light'),
+      })}
+      aria-label={t('切换主题')}
     >
       {getIcon(userPreference)}
       {showLabel && (

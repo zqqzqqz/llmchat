@@ -1,5 +1,6 @@
+
 import React, { useState, useRef } from 'react';
-import { Dialog } from '@/components/ui/Dialog';
+
 import {
   MessageSquare,
   Plus,
@@ -16,6 +17,8 @@ import { IconButton } from '@/components/ui/IconButton';
 import { useChatStore } from '@/store/chatStore';
 import { ChatSession } from '@/types';
 
+import { useI18n } from '@/i18n';
+
 interface SidebarProps {
   className?: string;
 }
@@ -31,8 +34,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => {
     deleteSession,
     switchToSession,
     renameSession,
-    clearCurrentAgentSessions,
+    setAgentSessionsForAgent,
+    setSessionMessages,
   } = useChatStore();
+  const { t, locale } = useI18n();
 
   // huihua.md 要求：根据当前智能体id从localStorage获取会话列表并显示
   const sessionsToDisplay = currentAgent ? (agentSessions[currentAgent.id] || []) : [];
@@ -44,11 +49,27 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => {
   const [touchStartY, setTouchStartY] = useState<number | null>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
 
-  const [showClearConfirm, setShowClearConfirm] = useState(false);
+
 
   const handleStartEdit = (session: ChatSession) => {
     setEditingId(session.id);
     setEditTitle(session.title);
+  };
+
+  const handleSwitchSession = async (session: ChatSession) => {
+      switchToSession(session.id);
+
+      if (!currentAgent) return;
+      if (currentAgent.id === PRODUCT_PREVIEW_AGENT_ID || currentAgent.id === VOICE_CALL_AGENT_ID) return;
+      if (session.messages && session.messages.length > 0) return;
+
+    try {
+      const detail = await chatService.getHistoryDetail(currentAgent.id, session.id);
+      const mapped = mapHistoryDetailToMessages(detail);
+      setSessionMessages(session.id, mapped);
+    } catch (error) {
+      console.error('加载聊天历史详情失败:', error);
+    }
   };
 
   const handleSaveEdit = () => {
@@ -64,10 +85,20 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => {
     setEditTitle('');
   };
 
-  const handleDeleteSession = (sessionId: string, e: React.MouseEvent) => {
+  const handleDeleteSession = async (sessionId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (confirm('确定要删除这个对话吗？')) {
+
+    if (confirm(t('确定要删除这个对话吗？'))) {
+
       deleteSession(sessionId);
+      return;
+    }
+
+    try {
+      await chatService.deleteHistory(currentAgent.id, sessionId);
+      deleteSession(sessionId);
+    } catch (error) {
+      console.error('删除聊天历史失败:', error);
     }
   };
 
@@ -121,7 +152,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => {
   };
 
   const formatTime = (date: Date) => {
-    return new Date(date).toLocaleTimeString('zh-CN', {
+    return new Date(date).toLocaleTimeString(locale, {
       hour: '2-digit',
       minute: '2-digit'
     });
@@ -161,10 +192,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => {
                   ? 'bg-brand/10 text-foreground'
                   : 'hover:bg-brand/10 text-foreground'
               }`}
-              onClick={() => {
-                // huihua.md 要求：点击会话标题显示该会话的详细内容（messages列表）
-                switchToSession(session.id);
-              }}
+              onClick={() => handleSwitchSession(session)}
             >
               <MessageSquare className="h-4 w-4 flex-shrink-0" />
 
@@ -210,7 +238,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => {
                       {formatTime(session.updatedAt)}
                     </div>
                   </div>
-                  <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity">
+                  <div
+                    className={`flex items-center gap-1 transition-opacity ${
+                      currentSession?.id === session.id || editingId === session.id
+                        ? 'opacity-100'
+                        : 'opacity-0 group-hover:opacity-100'
+                    }`}
+                  >
                     <IconButton
                       onClick={(e) => {
                         e.stopPropagation();
@@ -270,7 +304,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => {
             className="w-full flex items-center gap-3 font-medium"
           >
             <Plus className="h-5 w-5" />
-            新建对话
+            {t('新建对话')}
           </Button>
 
           {/* 隐藏清空对话按钮（业务要求不展示） */}
@@ -282,7 +316,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => {
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <input
               type="text"
-              placeholder="搜索对话..."
+              placeholder={t('搜索对话...')}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 rounded-xl border border-input bg-background text-foreground placeholder-muted-foreground focus:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus:border-transparent"
@@ -295,28 +329,28 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => {
           {sessionsToDisplay.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p>还没有对话</p>
-              <p className="text-sm">点击“新建对话”开始聊天</p>
+              <p>{t('还没有对话')}</p>
+              <p className="text-sm">{t('点击“新建对话”开始聊天')}</p>
             </div>
           ) : (
             <div>
               <SessionGroup
-                title="今天"
+                title={t('今天')}
                 sessions={groupedSessions.today}
                 icon={<Clock className="h-3 w-3" />}
               />
               <SessionGroup
-                title="昨天"
+                title={t('昨天')}
                 sessions={groupedSessions.yesterday}
                 icon={<Clock className="h-3 w-3" />}
               />
               <SessionGroup
-                title="本周"
+                title={t('本周')}
                 sessions={groupedSessions.thisWeek}
                 icon={<Calendar className="h-3 w-3" />}
               />
               <SessionGroup
-                title="更早"
+                title={t('更早')}
                 sessions={groupedSessions.older}
                 icon={<Calendar className="h-3 w-3" />}
               />

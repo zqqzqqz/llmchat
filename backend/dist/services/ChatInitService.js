@@ -5,10 +5,18 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ChatInitService = void 0;
 const axios_1 = __importDefault(require("axios"));
+const adaptiveCache_1 = require("@/utils/adaptiveCache");
 class ChatInitService {
     constructor(agentService) {
         this.cache = new Map();
-        this.CACHE_TTL = 5 * 60 * 1000;
+        this.cachePolicy = new adaptiveCache_1.AdaptiveTtlPolicy({
+            initialTtl: 5 * 60 * 1000,
+            minTtl: 60 * 1000,
+            maxTtl: 15 * 60 * 1000,
+            step: 60 * 1000,
+            sampleSize: 20,
+            adjustIntervalMs: 2 * 60 * 1000,
+        });
         this.agentService = agentService;
         this.httpClient = axios_1.default.create({
             timeout: 30000,
@@ -20,10 +28,13 @@ class ChatInitService {
     async getInitData(appId, chatId) {
         const cacheKey = `${appId}_${chatId || 'default'}`;
         const cached = this.cache.get(cacheKey);
-        if (cached && Date.now() - cached.timestamp < this.CACHE_TTL) {
+        const now = Date.now();
+        if (cached && cached.expiresAt > now) {
             console.log('✅ 使用缓存的初始化数据');
+            this.cachePolicy.recordHit();
             return cached.data;
         }
+        this.cachePolicy.recordMiss();
         const agent = await this.agentService.getAgent(appId);
         if (!agent) {
             throw new Error(`智能体不存在: ${appId}`);
@@ -37,7 +48,7 @@ class ChatInitService {
         const initData = await this.callFastGPTInitAPI(agent, chatId);
         this.cache.set(cacheKey, {
             data: initData,
-            timestamp: Date.now()
+            expiresAt: Date.now() + this.cachePolicy.getTtl(),
         });
         return initData;
     }
@@ -72,16 +83,18 @@ class ChatInitService {
                     'Authorization': `Bearer ${agent.apiKey}`,
                 },
             });
-            if (response.data.code !== 200) {
-                throw new Error(`FastGPT API错误: ${response.data.message || '未知错误'}`);
+            const responseData = response.data;
+            if (responseData.code !== 200) {
+                throw new Error(`FastGPT API错误: ${responseData.message || '未知错误'}`);
             }
             console.log('✅ FastGPT初始化API调用成功');
-            return response.data.data;
+            return responseData.data;
         }
         catch (error) {
             console.error('❌ FastGPT初始化API调用失败:', error);
-            if (axios_1.default.isAxiosError(error)) {
-                const message = error.response?.data?.message || error.message;
+            if (error && typeof error === 'object' && 'isAxiosError' in error && error.isAxiosError) {
+                const axiosError = error;
+                const message = axiosError.response?.data?.message || axiosError.message;
                 throw new Error(`FastGPT API调用失败: ${message}`);
             }
             throw error;
@@ -110,12 +123,13 @@ class ChatInitService {
     }
     clearCache() {
         this.cache.clear();
+        this.cachePolicy.reset();
         console.log('🧹 初始化数据缓存已清除');
     }
     clearExpiredCache() {
         const now = Date.now();
         for (const [key, value] of this.cache.entries()) {
-            if (now - value.timestamp > this.CACHE_TTL) {
+            if (value.expiresAt <= now) {
                 this.cache.delete(key);
             }
         }
