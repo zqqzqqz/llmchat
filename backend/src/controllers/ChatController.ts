@@ -26,16 +26,19 @@ export class ChatController {
   private agentService: AgentConfigService;
   private chatService: ChatProxyService;
   private initService: ChatInitService;
+
   private historyService: ChatHistoryService;
   private uploadDir: string;
+
 
   constructor() {
     this.agentService = new AgentConfigService();
     this.chatService = new ChatProxyService(this.agentService);
     this.initService = new ChatInitService(this.agentService);
+
     this.historyService = new ChatHistoryService();
     this.uploadDir = path.resolve(__dirname, '../../uploads');
-  }
+
 
   /**
    * 聊天初始化请求验证Schema
@@ -126,6 +129,42 @@ export class ChatController {
       mimeType: Joi.string().required(),
       size: Joi.number().min(0).optional(),
     }).optional(),
+  });
+
+  private historyListSchema = Joi.object({
+    agentId: Joi.string().required().messages({
+      'any.required': '智能体ID不能为空',
+      'string.empty': '智能体ID不能为空',
+    }),
+    page: Joi.number().min(1).optional(),
+    pageSize: Joi.number().min(1).max(200).optional(),
+  });
+
+  private historyDetailSchema = Joi.object({
+    agentId: Joi.string().required().messages({
+      'any.required': '智能体ID不能为空',
+      'string.empty': '智能体ID不能为空',
+    }),
+  });
+
+  private historyDeleteSchema = Joi.object({
+    agentId: Joi.string().required().messages({
+      'any.required': '智能体ID不能为空',
+      'string.empty': '智能体ID不能为空',
+    }),
+  });
+
+  private historyRetrySchema = Joi.object({
+    agentId: Joi.string().required().messages({
+      'any.required': '智能体ID不能为空',
+      'string.empty': '智能体ID不能为空',
+    }),
+    dataId: Joi.string().required().messages({
+      'any.required': '消息ID不能为空',
+      'string.empty': '消息ID不能为空',
+    }),
+    stream: Joi.boolean().optional().default(false),
+    detail: Joi.boolean().optional(),
   });
   /**
    * 点赞/点踩反馈请求验证Schema
@@ -553,17 +592,24 @@ export class ChatController {
         options,
         // 事件透传回调：关注 FastGPT 的 interactive 以及 chatId 事件
         (eventName: string, data: any) => {
+          if (!eventName) return;
+
           if (eventName === 'interactive') {
             console.log('🧩 收到交互节点事件 interactive，payload 预览:',
               (() => { try { return JSON.stringify(data).slice(0, 300); } catch { return '[Unserializable payload]'; } })()
             );
             this.sendSSEEvent(res, 'interactive', data);
-          } else if (eventName === 'chatId') {
+            return;
+          }
+
+          if (eventName === 'chatId') {
             console.log('🆔 透传本次使用的 chatId:', (data && (data.chatId || data.id)) || data);
             this.sendSSEEvent(res, 'chatId', data);
-          } else {
-            console.log('📎 收到未分类透传事件:', eventName);
+            return;
           }
+
+          console.log('📎 透传 FastGPT 事件:', eventName);
+          this.sendSSEEvent(res, eventName, data);
         }
         );
 
@@ -774,77 +820,6 @@ export class ChatController {
             timestamp: new Date().toISOString(),
           });
           res.end();
-
-
-  /**
-   *   
-   *  : /api/chat/feedback
-   */
-  const __tmp_feedback = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    try {
-      const { error, value } = this.feedbackSchema.validate(req.body);
-      if (error) {
-        const apiError: ApiError = {
-          code: 'VALIDATION_ERROR',
-          message: error?.details?.[0]?.message || (error as any)?.message || '请求参数校验失败',
-          timestamp: new Date().toISOString(),
-        };
-        res.status(400).json(apiError);
-        return;
-      }
-
-      const { agentId, chatId, dataId, userGoodFeedback, userBadFeedback } = value as any;
-
-      // 获取智能体配置
-      const agent = await this.agentService.getAgent(agentId);
-      if (!agent) {
-        const apiError: ApiError = {
-          code: 'AGENT_NOT_FOUND',
-          message: `智能体不存在: ${agentId}`,
-          timestamp: new Date().toISOString(),
-        };
-        res.status(404).json(apiError);
-        return;
-      }
-
-      // 组装 FastGPT 反馈 API 地址
-      const baseUrl = agent.endpoint.replace('/api/v1/chat/completions', '');
-      const url = `${baseUrl}/api/core/chat/feedback/updateUserFeedback`;
-
-      // 构建请求体
-      const payload: any = {
-        appId: agent.appId || agent.id,
-        chatId,
-        dataId,
-        ...(userGoodFeedback ? { userGoodFeedback } : {}),
-        ...(userBadFeedback ? { userBadFeedback } : {}),
-      };
-
-      const headers = {
-        Authorization: `Bearer ${agent.apiKey}`,
-        'Content-Type': 'application/json'
-      };
-
-      const resp = await axios.post(url, payload, { headers });
-      if (resp.data?.code !== 200) {
-        throw new Error(resp.data?.message || '反馈失败');
-      }
-
-      res.json({ success: true, data: null, timestamp: new Date().toISOString() });
-    } catch (err) {
-      console.error('提交点赞/点踩反馈失败:', err);
-      const apiError: ApiError = {
-        code: 'FEEDBACK_FAILED',
-        message: err instanceof Error ? err.message : '反馈失败',
-        timestamp: new Date().toISOString(),
-      };
-      res.status(500).json(apiError);
-    }
-
-  };
-
-
-
         }
       );
 
@@ -886,7 +861,64 @@ export class ChatController {
 
       const { agentId, chatId, dataId, userGoodFeedback, userBadFeedback } = value as any;
 
-      // 获取智能体配置
+      await this.fastgptSessionService.updateUserFeedback(agentId, {
+        chatId,
+        dataId,
+        userGoodFeedback,
+        userBadFeedback,
+      });
+
+      res.json({ success: true, data: null, timestamp: new Date().toISOString() });
+    } catch (err) {
+      console.error('提交点赞/点踩反馈失败:', err);
+      const apiError: ApiError = {
+        code: 'FEEDBACK_FAILED',
+        message: err instanceof Error ? err.message : '反馈失败',
+        timestamp: new Date().toISOString(),
+      };
+      let status = 500;
+      const errCode = (err as any)?.code;
+      const axiosStatus = (err as any)?.response?.status;
+      if (errCode === 'NOT_FOUND') {
+        status = 404;
+        apiError.code = 'AGENT_NOT_FOUND';
+      } else if (errCode === 'INVALID_PROVIDER' || errCode === 'INVALID_APP_ID') {
+        status = 400;
+        apiError.code = errCode;
+      } else if (axiosStatus === 404) {
+        status = 502;
+        apiError.code = 'UPSTREAM_NOT_FOUND';
+      } else if (axiosStatus === 401) {
+        status = 401;
+        apiError.code = 'UPSTREAM_UNAUTHORIZED';
+      } else if (axiosStatus === 408) {
+        status = 504;
+        apiError.code = 'UPSTREAM_TIMEOUT';
+      }
+      res.status(status).json(apiError);
+    }
+  };
+
+
+  /**
+   * 获取会话历史列表
+   * GET /api/chat/history?agentId=xxx
+   */
+  listChatHistories = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { error, value } = this.historyListSchema.validate(req.query);
+      if (error) {
+        const apiError: ApiError = {
+          code: 'VALIDATION_ERROR',
+          message: error?.details?.[0]?.message || (error as any)?.message || '请求参数校验失败',
+          timestamp: new Date().toISOString(),
+        };
+        res.status(400).json(apiError);
+        return;
+      }
+
+      const { agentId, page, pageSize } = value as { agentId: string; page?: number; pageSize?: number };
+
       const agent = await this.agentService.getAgent(agentId);
       if (!agent) {
         const apiError: ApiError = {
@@ -898,40 +930,219 @@ export class ChatController {
         return;
       }
 
-      // 组装 FastGPT 反馈 API 地址
-      const baseUrl = agent.endpoint.replace('/api/v1/chat/completions', '');
-      const url = `${baseUrl}/api/core/chat/feedback/updateUserFeedback`;
-
-      // 构建请求体
-      const payload: any = {
-        appId: agent.appId || agent.id,
-        chatId,
-        dataId,
-        ...(userGoodFeedback ? { userGoodFeedback } : {}),
-        ...(userBadFeedback ? { userBadFeedback } : {}),
-      };
-
-      const headers = {
-        Authorization: `Bearer ${agent.apiKey}`,
-        'Content-Type': 'application/json'
-      };
-
-      const resp = await axios.post(url, payload, { headers });
-      if (resp.data?.code !== 200) {
-        throw new Error(resp.data?.message || '反馈失败');
+      if (agent.provider !== 'fastgpt') {
+        const apiError: ApiError = {
+          code: 'INVALID_PROVIDER',
+          message: `智能体 ${agentId} 不支持远程会话历史查询`,
+          timestamp: new Date().toISOString(),
+        };
+        res.status(400).json(apiError);
+        return;
       }
 
-      res.json({ success: true, data: null, timestamp: new Date().toISOString() });
-    } catch (err) {
-      console.error('提交点赞/点踩反馈失败:', err);
+      const pagination: { page?: number; pageSize?: number } = {};
+      if (typeof page === 'number') {
+        pagination.page = page;
+      }
+      if (typeof pageSize === 'number') {
+        pagination.pageSize = pageSize;
+      }
+      const histories: FastGPTChatHistorySummary[] = await this.fastgptSessionService.listHistories(
+        agentId,
+        pagination
+      );
+
+      res.json({
+        success: true,
+        data: histories,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err: any) {
+      console.error('获取聊天历史列表失败:', err);
       const apiError: ApiError = {
-        code: 'FEEDBACK_FAILED',
-        message: err instanceof Error ? err.message : '反馈失败',
+        code: 'GET_HISTORY_LIST_FAILED',
+        message: err instanceof Error ? err.message : '获取聊天历史失败',
         timestamp: new Date().toISOString(),
       };
-      res.status(500).json(apiError);
+
+      // 错误语义映射
+      let status = 500;
+      const errCode = err?.code;
+      const axiosStatus = err?.response?.status;
+      if (errCode === 'NOT_FOUND') {
+        status = 404;
+        apiError.code = 'AGENT_NOT_FOUND';
+      } else if (errCode === 'INVALID_PROVIDER' || errCode === 'INVALID_APP_ID') {
+        status = 400;
+        apiError.code = errCode;
+      } else if (axiosStatus === 404) {
+        status = 502;
+        apiError.code = 'UPSTREAM_NOT_FOUND';
+      } else if (axiosStatus === 401) {
+        status = 401;
+        apiError.code = 'UPSTREAM_UNAUTHORIZED';
+      } else if (axiosStatus === 408) {
+        status = 504;
+        apiError.code = 'UPSTREAM_TIMEOUT';
+      }
+
+      res.status(status).json(apiError);
     }
   };
+
+  /**
+   * 获取指定会话历史详情
+   * GET /api/chat/history/:chatId?agentId=xxx
+   */
+  getChatHistory = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { chatId: pathChatId, sessionId } = req.params as { chatId?: string; sessionId?: string };
+      const chatId = pathChatId || sessionId;
+
+      if (!chatId) {
+        const apiError: ApiError = {
+          code: 'CHAT_ID_REQUIRED',
+          message: 'chatId 不能为空',
+          timestamp: new Date().toISOString(),
+        };
+        res.status(400).json(apiError);
+        return;
+      }
+
+      const { error, value } = this.historyDetailSchema.validate(req.query);
+      if (error) {
+        const apiError: ApiError = {
+          code: 'VALIDATION_ERROR',
+          message: error?.details?.[0]?.message || (error as any)?.message || '请求参数校验失败',
+          timestamp: new Date().toISOString(),
+        };
+        res.status(400).json(apiError);
+        return;
+      }
+
+      const { agentId } = value as { agentId: string };
+
+      const agent = await this.agentService.getAgent(agentId);
+      if (!agent) {
+        const apiError: ApiError = {
+          code: 'AGENT_NOT_FOUND',
+          message: `智能体不存在: ${agentId}`,
+          timestamp: new Date().toISOString(),
+        };
+        res.status(404).json(apiError);
+        return;
+      }
+
+      if (agent.provider !== 'fastgpt') {
+        const apiError: ApiError = {
+          code: 'INVALID_PROVIDER',
+          message: `智能体 ${agentId} 不支持远程会话历史查询`,
+          timestamp: new Date().toISOString(),
+        };
+        res.status(400).json(apiError);
+        return;
+      }
+
+      const detail: FastGPTChatHistoryDetail = await this.fastgptSessionService.getHistoryDetail(agentId, chatId);
+
+      res.json({
+        success: true,
+        data: detail,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err: any) {
+      console.error('获取聊天历史失败:', err);
+      const apiError: ApiError = {
+        code: 'GET_HISTORY_FAILED',
+        message: err instanceof Error ? err.message : '获取聊天历史失败',
+        timestamp: new Date().toISOString(),
+      };
+      let status = 500;
+      const errCode = err?.code;
+      const axiosStatus = err?.response?.status;
+      if (errCode === 'NOT_FOUND') {
+        status = 404;
+        apiError.code = 'AGENT_NOT_FOUND';
+      } else if (errCode === 'INVALID_PROVIDER' || errCode === 'INVALID_APP_ID') {
+        status = 400;
+        apiError.code = errCode;
+      } else if (axiosStatus === 404) {
+        status = 502;
+        apiError.code = 'UPSTREAM_NOT_FOUND';
+      } else if (axiosStatus === 401) {
+        status = 401;
+        apiError.code = 'UPSTREAM_UNAUTHORIZED';
+      } else if (axiosStatus === 408) {
+        status = 504;
+        apiError.code = 'UPSTREAM_TIMEOUT';
+      }
+      res.status(status).json(apiError);
+    }
+  };
+
+  /**
+   * 删除指定会话历史
+   * DELETE /api/chat/history/:chatId?agentId=xxx
+   */
+  deleteChatHistory = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const chatIdParam = req.params.chatId;
+      if (!chatIdParam) {
+        const apiError: ApiError = {
+          code: 'VALIDATION_ERROR',
+          message: '缺少 chatId 参数',
+          timestamp: new Date().toISOString(),
+        };
+        res.status(400).json(apiError);
+        return;
+      }
+
+      const chatId = chatIdParam;
+      const { error, value } = this.historyDeleteSchema.validate(req.query);
+      if (error) {
+        const apiError: ApiError = {
+          code: 'VALIDATION_ERROR',
+          message: error?.details?.[0]?.message || (error as any)?.message || '请求参数校验失败',
+          timestamp: new Date().toISOString(),
+        };
+        res.status(400).json(apiError);
+        return;
+      }
+
+      const { agentId } = value as { agentId: string };
+      await this.fastgptSessionService.deleteHistory(agentId, chatId);
+
+      res.json({ success: true, data: null, timestamp: new Date().toISOString() });
+    } catch (err: any) {
+      console.error('删除聊天历史失败:', err);
+      const apiError: ApiError = {
+        code: 'DELETE_HISTORY_FAILED',
+        message: err instanceof Error ? err.message : '删除聊天历史失败',
+        timestamp: new Date().toISOString(),
+      };
+      let status = 500;
+      const errCode = err?.code;
+      const axiosStatus = err?.response?.status;
+      if (errCode === 'NOT_FOUND') {
+        status = 404;
+        apiError.code = 'AGENT_NOT_FOUND';
+      } else if (errCode === 'INVALID_PROVIDER' || errCode === 'INVALID_APP_ID') {
+        status = 400;
+        apiError.code = errCode;
+      } else if (axiosStatus === 404) {
+        status = 502;
+        apiError.code = 'UPSTREAM_NOT_FOUND';
+      } else if (axiosStatus === 401) {
+        status = 401;
+        apiError.code = 'UPSTREAM_UNAUTHORIZED';
+      } else if (axiosStatus === 408) {
+        status = 504;
+        apiError.code = 'UPSTREAM_TIMEOUT';
+      }
+      res.status(status).json(apiError);
+    }
+  };
+
 
 
   private async ensureUploadDirectory(): Promise<void> {
@@ -1011,12 +1222,14 @@ export class ChatController {
   };
 
 
+
   /**
-   * 获取聊天历史（如果有实现）
-   * GET /api/chat/history/:sessionId
+   * 清空指定智能体的历史
+   * DELETE /api/chat/history?agentId=xxx
    */
-  getChatHistory = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  clearChatHistories = async (req: Request, res: Response): Promise<void> => {
     try {
+
       const { sessionId } = req.params;
       const limitRaw = req.query.limit;
       const offsetRaw = req.query.offset;
@@ -1055,15 +1268,106 @@ export class ChatController {
       res.json({
         success: true,
         data: history,
-        timestamp: new Date().toISOString(),
-      });
-    } catch (error) {
-      const apiError: ApiError = {
-        code: 'GET_HISTORY_FAILED',
-        message: '获取聊天历史失败',
+
         timestamp: new Date().toISOString(),
       };
+      let status = 500;
+      const errCode = err?.code;
+      const axiosStatus = err?.response?.status;
+      if (errCode === 'NOT_FOUND') {
+        status = 404;
+        apiError.code = 'AGENT_NOT_FOUND';
+      } else if (errCode === 'INVALID_PROVIDER' || errCode === 'INVALID_APP_ID') {
+        status = 400;
+        apiError.code = errCode;
+      } else if (axiosStatus === 404) {
+        status = 502;
+        apiError.code = 'UPSTREAM_NOT_FOUND';
+      } else if (axiosStatus === 401) {
+        status = 401;
+        apiError.code = 'UPSTREAM_UNAUTHORIZED';
+      } else if (axiosStatus === 408) {
+        status = 504;
+        apiError.code = 'UPSTREAM_TIMEOUT';
+      }
+      res.status(status).json(apiError);
+    }
+  };
 
+  /**
+   * 重新生成指定消息
+   * POST /api/chat/history/:chatId/retry
+   */
+  retryChatMessage = async (req: Request, res: Response): Promise<void> => {
+    const chatIdParam = req.params.chatId;
+    if (!chatIdParam) {
+      const apiError: ApiError = {
+        code: 'VALIDATION_ERROR',
+        message: '缺少 chatId 参数',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(apiError);
+      return;
+    }
+
+    const chatId = chatIdParam;
+    const { error, value } = this.historyRetrySchema.validate(req.body);
+    if (error) {
+      const apiError: ApiError = {
+        code: 'VALIDATION_ERROR',
+        message: error?.details?.[0]?.message || (error as any)?.message || '请求参数校验失败',
+        timestamp: new Date().toISOString(),
+      };
+      res.status(400).json(apiError);
+      return;
+    }
+
+    const { agentId, dataId, stream, detail } = value as { agentId: string; dataId: string; stream?: boolean; detail?: boolean };
+
+    try {
+      const historyDetail = await this.fastgptSessionService.getHistoryDetail(agentId, chatId);
+      const prepared = this.fastgptSessionService.prepareRetryPayload(historyDetail, dataId);
+
+      if (!prepared || !prepared.messages || prepared.messages.length === 0) {
+        const apiError: ApiError = {
+          code: 'RETRY_TARGET_NOT_FOUND',
+          message: '未找到可重新生成的用户消息',
+          timestamp: new Date().toISOString(),
+        };
+        res.status(404).json(apiError);
+        return;
+      }
+
+      const options: ChatOptions = {
+        chatId,
+        ...(typeof detail === 'boolean' ? { detail } : {}),
+        ...(prepared.responseChatItemId ? { responseChatItemId: prepared.responseChatItemId } : {}),
+      };
+
+      if (stream) {
+        await this.handleStreamRequest(res, agentId, prepared.messages, options);
+        return;
+      }
+
+      await this.handleNormalRequest(res, agentId, prepared.messages, options);
+    } catch (err) {
+      console.error('重新生成聊天消息失败:', err);
+
+      if (stream && res.headersSent) {
+        this.sendSSEEvent(res, 'error', {
+          code: 'RETRY_FAILED',
+          message: err instanceof Error ? err.message : '重新生成失败',
+          timestamp: new Date().toISOString(),
+        });
+        res.end();
+        return;
+      }
+
+      const apiError: ApiError = {
+        code: 'RETRY_FAILED',
+        message: err instanceof Error ? err.message : '重新生成失败',
+        timestamp: new Date().toISOString(),
+      };
       res.status(500).json(apiError);
     }
   };

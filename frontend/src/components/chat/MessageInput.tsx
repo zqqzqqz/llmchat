@@ -3,10 +3,12 @@ import { Send, Paperclip, Mic, Square, Loader2, X } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { IconButton } from '@/components/ui/IconButton';
 import { ChatInputProps } from '@/types';
+
 import { uploadAttachment } from '@/services/api';
 import { ChatAttachmentMetadata, VoiceNoteMetadata } from '@/types';
 import { toast } from '@/components/ui/Toast';
 import { useI18n } from '@/i18n';
+
 
 export const MessageInput: React.FC<ChatInputProps> = ({
   onSendMessage,
@@ -93,6 +95,7 @@ export const MessageInput: React.FC<ChatInputProps> = ({
   };
 
   const handleFileUpload = () => {
+
     if (disabled || uploading || isStreaming) return;
     fileInputRef.current?.click();
   };
@@ -124,6 +127,7 @@ export const MessageInput: React.FC<ChatInputProps> = ({
       mediaRecorderRef.current.stop();
     }
     resetRecordingState();
+
   };
 
   const handleVoiceRecord = async () => {

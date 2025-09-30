@@ -11,7 +11,9 @@ import { ChatMessage, Agent, StreamStatus } from '@/types';
 import 'highlight.js/styles/github-dark.css';
 import { useChatStore } from '@/store/chatStore';
 import { chatService } from '@/services/api';
+
 import { useI18n } from '@/i18n';
+
 
 import avatarImg from '@/img/4.png';
 
@@ -280,6 +282,19 @@ export const MessageItem: React.FC<MessageItemProps> = ({
         <img src={avatarImg} alt="AI" className="w-8 h-8 rounded-full object-cover flex-shrink-0 ring-1 ring-border bg-muted" />
 
         <div className="bg-card rounded-2xl px-4 py-3 shadow-sm border border-border flex-1">
+          {message.reasoning?.steps && message.reasoning.steps.length > 0 && (
+            <ReasoningTrail
+              steps={message.reasoning.steps}
+              totalSteps={message.reasoning.totalSteps}
+              isStreaming={isStreaming && !message.reasoning.finished}
+              finished={!!message.reasoning.finished}
+            />
+          )}
+
+          {message.events && message.events.length > 0 && (
+            <EventTrail events={message.events} />
+          )}
+
           {/* 消息内容 */}
           <div className="prose prose-sm max-w-none dark:prose-invert">
             <ReactMarkdown

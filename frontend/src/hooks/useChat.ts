@@ -1,11 +1,13 @@
 import { useCallback } from 'react';
 import { chatService } from '@/services/api';
 import { useChatStore } from '@/store/chatStore';
+
 import { ChatMessage, ChatOptions, OriginalChatMessage } from '@/types';
 import { useI18n } from '@/i18n';
 
 export const useChat = () => {
   const { t } = useI18n();
+
   const sendMessage = useCallback(async (
     content: string,
     options?: ChatOptions
@@ -76,6 +78,7 @@ export const useChat = () => {
         await chatService.sendStreamMessage(
           currentAgent.id,
           chatMessages,
+
           {
             onChunk: (chunk) => {
               useChatStore.getState().updateLastMessage(chunk);
@@ -94,6 +97,7 @@ export const useChat = () => {
             signal: controller.signal,
           },
           mergedOptions
+
         );
       } else {
         // 非流式响应
@@ -119,7 +123,9 @@ export const useChat = () => {
       useChatStore.getState().setIsStreaming(false);
       useChatStore.getState().setStreamingStatus(null);
     }
+
   }, [t]);
+
 
   // 继续运行：交互节点-用户选择
   const continueInteractiveSelect = useCallback(async (value: string) => {
@@ -132,9 +138,92 @@ export const useChat = () => {
     await sendMessage(content);
   }, [sendMessage]);
 
+  const retryMessage = useCallback(async (messageId: string) => {
+    if (!currentAgent || !currentSession) {
+      throw new Error('没有选择智能体或会话');
+    }
+
+    const targetMessage = messages.find((msg) => msg.id === messageId);
+    if (!targetMessage) {
+      throw new Error('未找到需要重新生成的消息');
+    }
+
+    updateMessageById(messageId, (prev) => ({ ...prev, AI: '', reasoning: undefined }));
+
+    try {
+      setIsStreaming(true);
+
+      if (preferences.streamingEnabled) {
+        await chatService.retryStreamMessage(
+          currentAgent.id,
+          currentSession.id,
+          messageId,
+          (chunk) => {
+            updateMessageById(messageId, (prev) => ({ ...prev, AI: `${prev.AI || ''}${chunk}` }));
+          },
+          (status) => {
+            setStreamingStatus(status);
+            if (status?.type === 'complete' || status?.type === 'error') {
+              finalizeReasoning();
+            }
+          },
+          { detail: true },
+          (interactiveData) => {
+            try {
+              addMessage({ interactive: interactiveData });
+            } catch (e) {
+              console.warn('处理 retry interactive 事件失败:', e, interactiveData);
+            }
+          },
+          (cid) => {
+            debugLog('重新生成消息使用 chatId:', cid);
+          },
+          (reasoningEvent) => {
+            const parsed = parseReasoningPayload(reasoningEvent);
+            if (!parsed) return;
+
+            parsed.steps.forEach((step) => appendReasoningStep(step));
+
+            if (parsed.finished) {
+              finalizeReasoning(parsed.totalSteps);
+            }
+          },
+          (eventName, payload) => {
+            const normalized = normalizeFastGPTEvent(eventName, payload);
+            if (!normalized) return;
+            appendAssistantEvent(normalized);
+          }
+        );
+      } else {
+        const response = await chatService.retryMessage(currentAgent.id, currentSession.id, messageId, { detail: true });
+        const assistantContent = response.choices[0]?.message?.content || '';
+        updateMessageById(messageId, (prev) => ({ ...prev, AI: assistantContent }));
+      }
+    } catch (error) {
+      console.error('重新生成消息失败:', error);
+      updateMessageById(messageId, (prev) => ({ ...prev, AI: '抱歉，重新生成时出现错误。请稍后重试。' }));
+    } finally {
+      setIsStreaming(false);
+      setStreamingStatus(null);
+    }
+  }, [
+    currentAgent,
+    currentSession,
+    messages,
+    preferences.streamingEnabled,
+    updateMessageById,
+    setIsStreaming,
+    setStreamingStatus,
+    appendReasoningStep,
+    finalizeReasoning,
+    addMessage,
+    appendAssistantEvent,
+  ]);
+
   return {
     sendMessage,
     continueInteractiveSelect,
     continueInteractiveForm,
+    retryMessage,
   };
 };

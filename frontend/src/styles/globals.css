@@ -58,18 +58,21 @@
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
+  /* 使用品牌色作为主色 */
+  --primary: var(--brand);
+  --primary-foreground: var(--brand-foreground);
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
   --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  /* 使用品牌色作为强调色 */
+  --accent: var(--brand);
+  --accent-foreground: var(--brand-foreground);
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  /* 焦点环采用品牌色 */
+  --ring: var(--brand);
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
@@ -97,18 +100,18 @@
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.205 0 0);
   --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
+  --primary: var(--brand);
+  --primary-foreground: var(--brand-foreground);
   --secondary: oklch(0.269 0 0);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.269 0 0);
   --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  --accent: var(--brand);
+  --accent-foreground: var(--brand-foreground);
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --ring: var(--brand);
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
@@ -324,6 +327,7 @@
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 1;
+  line-clamp: 1;
 }
 
 .line-clamp-2 {
@@ -331,6 +335,7 @@
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 .line-clamp-3 {
@@ -338,6 +343,7 @@
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
+  line-clamp: 3;
 }
 
 /* Markdown 样式 */
@@ -392,6 +398,16 @@
 
 .dark .prose a:hover {
   color: #93c5fd;
+}
+
+/* 强调（粗体）文本使用品牌色（熵基绿） */
+.prose strong,
+.prose b {
+  color: var(--brand);
+}
+.dark .prose strong,
+.dark .prose b {
+  color: var(--brand);
 }
 
 .prose pre {
@@ -516,4 +532,35 @@
   .no-print {
     display: none !important;
   }
+}
+/*
+  Light mode: make inline span and svg brand green inside markdown (.prose)
+  Avoid altering code syntax highlighting spans in pre/code/.hljs
+*/
+.prose :where(span):not(code span):not(pre span):not(.hljs span) {
+  color: var(--brand);
+}
+.prose :where(svg) {
+  color: var(--brand);
+  fill: currentColor;
+  stroke: currentColor;
+}
+
+/* Dark mode: keep original colors for inline spans and icons in prose */
+.dark .prose :where(span):not(code span):not(pre span):not(.hljs span) {
+  color: inherit;
+}
+.dark .prose :where(svg) {
+  color: inherit;
+  fill: currentColor;
+  stroke: currentColor;
+}
+
+/* Utility: brand-accent container to tint spans and svgs anywhere */
+.brand-accent :where(span, svg) {
+  color: var(--brand);
+}
+.brand-accent svg {
+  fill: currentColor;
+  stroke: currentColor;
 }

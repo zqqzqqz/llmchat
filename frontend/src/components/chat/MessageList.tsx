@@ -12,13 +12,15 @@ interface MessageListProps {
   // 为了兼容 init 交互，放宽参数类型
   onInteractiveSelect?: (value: any) => void;
   onInteractiveFormSubmit?: (values: any) => void;
+  onRetryMessage?: (messageId: string) => void;
 }
 
 export const MessageList: React.FC<MessageListProps> = memo(({
   messages,
   isStreaming = false,
   onInteractiveSelect,
-  onInteractiveFormSubmit
+  onInteractiveFormSubmit,
+  onRetryMessage,
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastMessageRef = useRef<HTMLDivElement>(null);
@@ -53,6 +55,7 @@ export const MessageList: React.FC<MessageListProps> = memo(({
                   streamingStatus={streamingStatus ?? undefined}
                   onInteractiveSelect={onInteractiveSelect}
                   onInteractiveFormSubmit={onInteractiveFormSubmit}
+                  onRetry={message.id ? () => onRetryMessage?.(message.id!) : undefined}
                 />
                 {/* 最后一个消息的占位元素 */}
                 {isLastMessage && (

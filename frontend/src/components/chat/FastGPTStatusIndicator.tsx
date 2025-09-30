@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Bot, Database, Workflow, CheckCircle, Circle, AlertCircle } from 'lucide-react';
 import { Agent, StreamStatus } from '@/types';
+
 import { useI18n } from '@/i18n';
 
 interface FastGPTStatusIndicatorProps {
@@ -33,7 +34,9 @@ export const FastGPTStatusIndicator: React.FC<FastGPTStatusIndicatorProps> = ({
 
   const checkFastGPTStatus = async () => {
     try {
+
       console.log(t('检查 FastGPT 状态'), agent.id);
+
       // 简化状态检查逻辑，直接设置为就绪状态
       // 如果需要实际状态检查，可以调用后端接口
       setContextStatus('active');
@@ -43,7 +46,9 @@ export const FastGPTStatusIndicator: React.FC<FastGPTStatusIndicatorProps> = ({
       const response = await fetch(`/api/agents/${agent.id}`);
       if (response.ok) {
         const agentData = await response.json();
+
         console.log(t('FastGPT 智能体数据'), agentData);
+
         setContextStatus(agentData.data?.isActive ? 'active' : 'inactive');
         setKnowledgeStatus('ready');
       }
@@ -60,7 +65,7 @@ export const FastGPTStatusIndicator: React.FC<FastGPTStatusIndicatorProps> = ({
     return null;
   }
   
-  console.log('FastGPT 状态指示器渲染:', {
+  debugLog('FastGPT 状态指示器渲染:', {
     isStreaming,
     currentStatus,
     moduleHistory: moduleHistory.length,

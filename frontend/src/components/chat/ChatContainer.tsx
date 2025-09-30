@@ -5,7 +5,9 @@ import { useChatStore } from '@/store/chatStore';
 import { useChat } from '@/hooks/useChat';
 import { Bot, Sparkles } from 'lucide-react';
 import { chatService } from '@/services/api';
+
 import { useI18n } from '@/i18n';
+
 
 export const ChatContainer: React.FC = () => {
   const {
@@ -18,11 +20,13 @@ export const ChatContainer: React.FC = () => {
     updateLastMessage,
     setIsStreaming,
     createNewSession,
+
     stopStreaming,
     setStreamAbortController,
   } = useChatStore();
   const { sendMessage, continueInteractiveSelect, continueInteractiveForm } = useChat();
   const { t } = useI18n();
+
 
   // 避免重复触发同一会话/智能体的开场白
   const welcomeTriggeredKeyRef = useRef<string | null>(null);
@@ -92,25 +96,29 @@ export const ChatContainer: React.FC = () => {
   // 交互回调：区分 init 起源与普通交互
   const handleInteractiveSelect = (payload: any) => {
     if (typeof payload === 'string') {
-      // 普通交互（非 init）：直接继续运行
+      // 普通交互（非 init）：先移除交互气泡，再继续运行
+      try { useChatStore.getState().removeLastInteractiveMessage(); } catch {}
       return continueInteractiveSelect(payload);
     }
     if (payload && payload.origin === 'init') {
       // init 交互：仅收集变量，显示输入框，不请求后端
       setPendingInitVars((prev) => ({ ...(prev || {}), [payload.key]: payload.value }));
       setHideComposer(false);
+      try { useChatStore.getState().removeLastInteractiveMessage(); } catch {}
     }
   };
 
   const handleInteractiveFormSubmit = (payload: any) => {
     // 非 init 表单：直接继续运行
     if (!payload || payload.origin !== 'init') {
+      try { useChatStore.getState().removeLastInteractiveMessage(); } catch {}
       return continueInteractiveForm(payload);
     }
     // init 表单：仅收集变量，显示输入框
     const values = payload.values || {};
     setPendingInitVars((prev) => ({ ...(prev || {}), ...values }));
     setHideComposer(false);
+    try { useChatStore.getState().removeLastInteractiveMessage(); } catch {}
   };
 
   // 发送消息：若存在 init 变量，则在首次发送时一并携带
@@ -127,6 +135,10 @@ export const ChatContainer: React.FC = () => {
 
 
   useEffect(() => {
+    if (currentAgent?.id === PRODUCT_PREVIEW_AGENT_ID || currentAgent?.id === VOICE_CALL_AGENT_ID) {
+      return;
+    }
+
     // 仅在有智能体、当前没有消息、且不在流式中时触发
     if (!currentAgent) return;
     if (isStreaming) return;
@@ -161,6 +173,10 @@ export const ChatContainer: React.FC = () => {
               updateLastMessage(chunk);
             },
             (initData) => {
+              if (initData?.chatId && sessionId) {
+                bindSessionId(sessionId, initData.chatId);
+                sessionId = initData.chatId;
+              }
               // 流式开场白完成后，根据 variables 渲染交互气泡
               renderVariablesAsInteractive(initData);
             },
@@ -168,9 +184,11 @@ export const ChatContainer: React.FC = () => {
           );
         } else {
           const data = await chatService.init(currentAgent.id, sessionId);
+
           const descriptionSuffix = currentAgent.description
             ? t('：{description}', { description: currentAgent.description })
             : '';
+
           const content =
             data?.welcomeText ||
             data?.app?.chatConfig?.welcomeText ||
@@ -201,7 +219,15 @@ export const ChatContainer: React.FC = () => {
 
     run();
     // 仅在智能体/会话变更或消息长度变化时检查
-  }, [currentAgent?.id, currentSession?.id, messages.length, isStreaming, preferences.streamingEnabled, createNewSession, addMessage, updateLastMessage, setIsStreaming]);
+  }, [currentAgent?.id, currentSession?.id, messages.length, isStreaming, preferences.streamingEnabled, createNewSession, addMessage, updateLastMessage, setIsStreaming, bindSessionId]);
+
+  if (currentAgent?.id === PRODUCT_PREVIEW_AGENT_ID) {
+    return <ProductPreviewWorkspace agent={currentAgent} />;
+  }
+
+  if (currentAgent?.id === VOICE_CALL_AGENT_ID) {
+    return <VoiceCallWorkspace agent={currentAgent} />;
+  }
 
   // 无智能体时的提示界面
   if (!currentAgent) {
@@ -289,11 +315,12 @@ export const ChatContainer: React.FC = () => {
     <div className="flex flex-col h-full bg-background">
       <div className="flex-1 overflow-hidden pt-[37px] sm:pt-0">
         <MessageList
-            messages={messages}
-            isStreaming={isStreaming}
-            onInteractiveSelect={handleInteractiveSelect}
-            onInteractiveFormSubmit={handleInteractiveFormSubmit}
-          />
+          messages={messages}
+          isStreaming={isStreaming}
+          onInteractiveSelect={handleInteractiveSelect}
+          onInteractiveFormSubmit={handleInteractiveFormSubmit}
+          onRetryMessage={retryMessage}
+        />
       </div>
       <div className="border-t border-border/50 bg-background p-4">
         <div className="max-w-4xl mx-auto">

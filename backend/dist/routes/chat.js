@@ -8,6 +8,10 @@ exports.chatRoutes = router;
 const chatController = new ChatController_1.ChatController();
 router.post('/completions', chatController.chatCompletions);
 router.get('/init', chatController.chatInit);
-router.get('/history/:sessionId', chatController.getChatHistory);
+router.get('/history', chatController.listChatHistories);
+router.get('/history/:chatId', chatController.getChatHistory);
+router.delete('/history/:chatId', chatController.deleteChatHistory);
+router.delete('/history', chatController.clearChatHistories);
+router.post('/history/:chatId/retry', chatController.retryChatMessage);
 router.post('/feedback', chatController.updateUserFeedback);
 //# sourceMappingURL=chat.js.map

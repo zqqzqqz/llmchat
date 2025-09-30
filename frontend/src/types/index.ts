@@ -24,12 +24,74 @@ export type InteractiveData =
   | { type: 'userSelect'; params: { description?: string; userSelectOptions: { key: string; value: string }[] } }
   | { type: 'userInput'; params: { description?: string; inputForm: any[] } };
 
+export interface ReasoningStep {
+  id: string;
+  order: number;
+  content: string;
+  title?: string;
+  raw?: any;
+}
+
+export interface ReasoningState {
+  steps: ReasoningStep[];
+  totalSteps?: number;
+  finished?: boolean;
+  lastUpdatedAt?: number;
+}
+
+export interface ReasoningStepUpdate {
+  content: string;
+  order?: number;
+  totalSteps?: number;
+  title?: string;
+  raw?: any;
+  finished?: boolean;
+}
+
+export interface FastGPTEvent {
+  id: string;
+  name: string;
+  label: string;
+  summary?: string;
+  detail?: string;
+  level: 'info' | 'success' | 'warning' | 'error';
+  payload: any;
+  timestamp: number;
+  groupId?: string;
+  stage?: 'start' | 'update' | 'complete';
+}
+
+export interface ProductPreviewBoundingBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface ProductPreviewRequest {
+  sceneImage: string;
+  productImage?: string;
+  productQuery: string;
+  personalization?: string;
+  boundingBox: ProductPreviewBoundingBox;
+}
+
+export interface ProductPreviewResponse {
+  requestId?: string;
+  traceId?: string;
+  previewImage?: string;
+  imageUrl?: string;
+  raw?: any;
+  status?: string;
+}
+
 export interface ChatMessage {
   AI?: string;    // AI回复内容
   HUMAN?: string; // 用户输入内容
   id?: string;    // 响应数据ID（FastGPT responseChatItemId，用于点赞/点踩反馈）
   feedback?: 'good' | 'bad' | null; // 点赞/点踩的持久化状态（good=点赞，bad=点踩，null=无）
   interactive?: InteractiveData; // FastGPT 交互节点（流式 detail=true）
+
   attachments?: ChatAttachmentMetadata[];
   voiceNote?: VoiceNoteMetadata | null;
 }
@@ -49,6 +111,7 @@ export interface VoiceNoteMetadata {
   duration: number;
   mimeType: string;
   size?: number;
+
 }
 
 /**
@@ -163,8 +226,10 @@ export interface ChatSession {
   title: string;           // 会话标题（取自首条消息前30字符）
   agentId: string;         // 关联的智能体ID
   messages: ChatMessage[]; // 消息列表 [{'AI': string, 'HUMAN': string}]
+
   createdAt: number;       // 创建时间(时间戳)
   updatedAt: number;       // 更新时间(时间戳)
+
 }
 
 /**

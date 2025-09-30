@@ -4,7 +4,7 @@ export declare class ChatInitService {
     private httpClient;
     private agentService;
     private cache;
-    private readonly CACHE_TTL;
+    private readonly cachePolicy;
     constructor(agentService: AgentConfigService);
     getInitData(appId: string, chatId?: string): Promise<FastGPTInitResponse>;
     getInitDataStream(appId: string, chatId: string | undefined, onChunk: (chunk: string) => void, onComplete: (data: FastGPTInitResponse) => void, onError: (error: Error) => void): Promise<void>;

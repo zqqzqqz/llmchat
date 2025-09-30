@@ -1,4 +1,6 @@
+
 import React, { useState, useRef } from 'react';
+
 import {
   MessageSquare,
   Plus,
@@ -14,6 +16,7 @@ import { Button } from '@/components/ui/Button';
 import { IconButton } from '@/components/ui/IconButton';
 import { useChatStore } from '@/store/chatStore';
 import { ChatSession } from '@/types';
+
 import { useI18n } from '@/i18n';
 
 interface SidebarProps {
@@ -31,7 +34,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => {
     deleteSession,
     switchToSession,
     renameSession,
-    clearCurrentAgentSessions,
+    setAgentSessionsForAgent,
+    setSessionMessages,
   } = useChatStore();
   const { t, locale } = useI18n();
 
@@ -45,9 +49,27 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => {
   const [touchStartY, setTouchStartY] = useState<number | null>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
 
+
+
   const handleStartEdit = (session: ChatSession) => {
     setEditingId(session.id);
     setEditTitle(session.title);
+  };
+
+  const handleSwitchSession = async (session: ChatSession) => {
+      switchToSession(session.id);
+
+      if (!currentAgent) return;
+      if (currentAgent.id === PRODUCT_PREVIEW_AGENT_ID || currentAgent.id === VOICE_CALL_AGENT_ID) return;
+      if (session.messages && session.messages.length > 0) return;
+
+    try {
+      const detail = await chatService.getHistoryDetail(currentAgent.id, session.id);
+      const mapped = mapHistoryDetailToMessages(detail);
+      setSessionMessages(session.id, mapped);
+    } catch (error) {
+      console.error('加载聊天历史详情失败:', error);
+    }
   };
 
   const handleSaveEdit = () => {
@@ -63,10 +85,20 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => {
     setEditTitle('');
   };
 
-  const handleDeleteSession = (sessionId: string, e: React.MouseEvent) => {
+  const handleDeleteSession = async (sessionId: string, e: React.MouseEvent) => {
     e.stopPropagation();
+
     if (confirm(t('确定要删除这个对话吗？'))) {
+
       deleteSession(sessionId);
+      return;
+    }
+
+    try {
+      await chatService.deleteHistory(currentAgent.id, sessionId);
+      deleteSession(sessionId);
+    } catch (error) {
+      console.error('删除聊天历史失败:', error);
     }
   };
 
@@ -160,10 +192,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => {
                   ? 'bg-brand/10 text-foreground'
                   : 'hover:bg-brand/10 text-foreground'
               }`}
-              onClick={() => {
-                // huihua.md 要求：点击会话标题显示该会话的详细内容（messages列表）
-                switchToSession(session.id);
-              }}
+              onClick={() => handleSwitchSession(session)}
             >
               <MessageSquare className="h-4 w-4 flex-shrink-0" />
 
@@ -209,7 +238,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => {
                       {formatTime(session.updatedAt)}
                     </div>
                   </div>
-                  <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity">
+                  <div
+                    className={`flex items-center gap-1 transition-opacity ${
+                      currentSession?.id === session.id || editingId === session.id
+                        ? 'opacity-100'
+                        : 'opacity-0 group-hover:opacity-100'
+                    }`}
+                  >
                     <IconButton
                       onClick={(e) => {
                         e.stopPropagation();

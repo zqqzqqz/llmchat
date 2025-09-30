@@ -59,6 +59,11 @@ export declare class ChatProxyService {
     private registerProvider;
     sendMessage(agentId: string, messages: ChatMessage[], options?: ChatOptions): Promise<ChatResponse>;
     sendStreamMessage(agentId: string, messages: ChatMessage[], onChunk: (chunk: string) => void, onStatus: (status: StreamStatus) => void, options?: ChatOptions, onEvent?: (eventName: string, data: any) => void): Promise<void>;
+    private findNextEventBoundary;
+    private parseSSEEventBlock;
+    private logStreamEvent;
+    private extractReasoningPayload;
+    private dispatchFastGPTEvent;
     private handleStreamResponse;
     private getProvider;
     validateAgentConfig(agentId: string): Promise<boolean>;
