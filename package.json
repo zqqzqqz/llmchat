@@ -13,7 +13,11 @@
     "start": "cd backend && npm start",
     "test": "npm run backend:test && npm run frontend:test",
     "backend:test": "cd backend && npm test",
-    "frontend:test": "cd frontend && npm test"
+    "frontend:test": "cd frontend && npm test",
+    "backend:lint": "cd backend && npm run lint",
+    "frontend:lint": "cd frontend && npm run lint",
+    "lint": "npm run backend:lint && npm run frontend:lint",
+    "lint:fix": "npm run backend:lint -- --fix && npm run frontend:lint -- --fix"
   },
   "keywords": ["llm", "chat", "ai", "agent", "switching", "react", "typescript", "node"],
   "author": "AI Developer",
