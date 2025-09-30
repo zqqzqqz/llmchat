@@ -1,5 +1,6 @@
 import React from 'react';
 import { Button } from '@/components/ui/Button';
+import { useI18n } from '@/i18n';
 
 export interface DialogProps {
   open: boolean;
@@ -14,21 +15,25 @@ export interface DialogProps {
 
 export const Dialog: React.FC<DialogProps> = ({
   open,
-  title = '确认操作',
+  title,
   description,
-  confirmText = '确认',
-  cancelText = '取消',
+  confirmText,
+  cancelText,
   destructive = false,
   onConfirm,
   onClose,
 }) => {
   if (!open) return null;
+  const { t } = useI18n();
+  const resolvedTitle = title ?? t('确认操作');
+  const resolvedConfirm = confirmText ?? t('确认');
+  const resolvedCancel = cancelText ?? t('取消');
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
       <div className="relative z-[61] w-full max-w-sm mx-4 rounded-2xl border border-border bg-card shadow-2xl">
         <div className="p-4 sm:p-5">
-          <div className="text-base font-semibold text-foreground">{title}</div>
+          <div className="text-base font-semibold text-foreground">{resolvedTitle}</div>
           {description && (
             <div className="mt-2 text-sm text-muted-foreground whitespace-pre-wrap">
               {description}
@@ -42,7 +47,7 @@ export const Dialog: React.FC<DialogProps> = ({
               onClick={onClose}
               className="min-w-[84px]"
             >
-              {cancelText}
+              {resolvedCancel}
             </Button>
             <Button
               variant={destructive ? 'destructive' : 'brand'}
@@ -51,7 +56,7 @@ export const Dialog: React.FC<DialogProps> = ({
               onClick={() => onConfirm?.()}
               className="min-w-[84px]"
             >
-              {confirmText}
+              {resolvedConfirm}
             </Button>
           </div>
         </div>

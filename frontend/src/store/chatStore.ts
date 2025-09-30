@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { Agent, ChatMessage, StreamStatus, ChatSession, UserPreferences, AgentSessionsMap } from '@/types';
+import { translate } from '@/i18n';
 
 interface ChatState {
   // 智能体状态
@@ -15,6 +16,7 @@ interface ChatState {
   messages: ChatMessage[];             // 当前会话的消息列表
   isStreaming: boolean;
   streamingStatus: StreamStatus | null;
+  streamAbortController: AbortController | null;
 
   // 用户偏好
   preferences: UserPreferences;
@@ -34,6 +36,8 @@ interface ChatState {
   clearMessages: () => void;
   setIsStreaming: (streaming: boolean) => void;
   setStreamingStatus: (status: StreamStatus | null) => void;
+  setStreamAbortController: (controller: AbortController | null) => void;
+  stopStreaming: () => void;
   setAgentSelectorOpen: (open: boolean) => void;
   setSidebarOpen: (open: boolean) => void;
   updatePreferences: (preferences: Partial<UserPreferences>) => void;
@@ -58,6 +62,7 @@ export const useChatStore = create<ChatState>()(
       currentSession: null,
       isStreaming: false,
       streamingStatus: null,
+      streamAbortController: null,
       preferences: {
         theme: {
           mode: 'auto',
@@ -123,7 +128,7 @@ export const useChatStore = create<ChatState>()(
               ...state.agentSessions,
               [state.currentAgent.id]: state.agentSessions[state.currentAgent.id].map(session =>
                 session.id === state.currentSession!.id
-                  ? { ...session, messages: updatedMessages, updatedAt: new Date() }
+                  ? { ...session, messages: updatedMessages, updatedAt: Date.now() }
                   : session
               )
             };
@@ -147,7 +152,7 @@ export const useChatStore = create<ChatState>()(
               currentSession: {
                 ...state.currentSession,
                 messages: updatedMessages,
-                updatedAt: new Date()
+              updatedAt: Date.now()
               }
             };
           }
@@ -158,38 +163,25 @@ export const useChatStore = create<ChatState>()(
       // 更新最后一条消息（流式响应）- 修复实时更新问题
       updateLastMessage: (content) =>
         set((state) => {
-          console.log('🔄 updateLastMessage 被调用:', content.substring(0, 50));
-          console.log('📊 当前消息数量:', state.messages.length);
-
-          // 创建全新的messages数组，确保引用更新
           const messages = state.messages.map((msg, index) => {
             if (index === state.messages.length - 1 && msg.AI !== undefined) {
-              const updatedMessage = {
+              return {
                 ...msg,
                 AI: (msg.AI || '') + content,
-                _lastUpdate: Date.now() // 添加时间戳强制更新
+                _lastUpdate: Date.now(),
               } as ChatMessage;
-              console.log('📝 消息更新:', {
-                beforeLength: msg.AI?.length || 0,
-                afterLength: (updatedMessage.AI || '').length,
-                addedContent: content.length
-              });
-              return updatedMessage;
             }
             return msg;
           });
 
-          console.log('✅ 状态更新完成，最新消息长度:', (messages[messages.length - 1]?.AI || '').length);
-
-          // 同步更新当前会话的消息
           if (state.currentSession && state.currentAgent) {
             const updatedAgentSessions = {
               ...state.agentSessions,
-              [state.currentAgent.id]: state.agentSessions[state.currentAgent.id].map(session =>
+              [state.currentAgent.id]: state.agentSessions[state.currentAgent.id].map((session) =>
                 session.id === state.currentSession!.id
-                  ? { ...session, messages, updatedAt: new Date() }
+                  ? { ...session, messages, updatedAt: Date.now() }
                   : session
-              )
+              ),
             };
 
             return {
@@ -198,8 +190,8 @@ export const useChatStore = create<ChatState>()(
               currentSession: {
                 ...state.currentSession,
                 messages,
-                updatedAt: new Date()
-              }
+                updatedAt: Date.now(),
+              },
             };
           }
 
@@ -220,7 +212,7 @@ export const useChatStore = create<ChatState>()(
               ...state.agentSessions,
               [state.currentAgent.id]: state.agentSessions[state.currentAgent.id].map(session =>
                 session.id === state.currentSession!.id
-                  ? { ...session, messages, updatedAt: new Date() }
+                  ? { ...session, messages, updatedAt: Date.now() }
                   : session
               )
             };
@@ -231,7 +223,7 @@ export const useChatStore = create<ChatState>()(
               currentSession: {
                 ...state.currentSession,
                 messages,
-                updatedAt: new Date()
+                updatedAt: Date.now()
               }
             };
           }
@@ -240,8 +232,22 @@ export const useChatStore = create<ChatState>()(
         }),
 
       clearMessages: () => set({ messages: [] }),
-      setIsStreaming: (streaming) => set({ isStreaming: streaming }),
+      setIsStreaming: (streaming) =>
+        set((state) => ({
+          isStreaming: streaming,
+          streamingStatus: streaming ? state.streamingStatus : null,
+        })),
       setStreamingStatus: (status) => set({ streamingStatus: status }),
+      setStreamAbortController: (controller) => set({ streamAbortController: controller }),
+      stopStreaming: () =>
+        set((state) => {
+          state.streamAbortController?.abort();
+          return {
+            isStreaming: false,
+            streamingStatus: null,
+            streamAbortController: null,
+          };
+        }),
       setAgentSelectorOpen: (open) => set({ agentSelectorOpen: open }),
       setSidebarOpen: (open) => set({ sidebarOpen: open }),
 
@@ -258,11 +264,11 @@ export const useChatStore = create<ChatState>()(
         // huihua.md 要求：新建对话时添加空messages的会话到agentId数组中
         const newSession: ChatSession = {
           id: Date.now().toString(),        // 时间戳字符串作为会话id
-          title: '新对话',                   // 默认标题
+          title: translate('新对话'),       // 默认标题
           agentId: currentAgent.id,         // 关联的智能体ID
           messages: [],                     // 空的消息列表（huihua.md要求）
-          createdAt: new Date(),           // 创建时间
-          updatedAt: new Date(),           // 更新时间
+          createdAt: Date.now(),           // 创建时间
+          updatedAt: Date.now(),           // 更新时间
         };
         
         set((state) => {
@@ -339,7 +345,7 @@ export const useChatStore = create<ChatState>()(
             agentSessions: {
               ...state.agentSessions,
               [state.currentAgent.id]: state.agentSessions[state.currentAgent.id].map(s => 
-                s.id === sessionId ? { ...s, title, updatedAt: new Date() } : s
+                s.id === sessionId ? { ...s, title, updatedAt: Date.now() } : s
               )
             }
           };

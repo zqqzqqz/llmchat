@@ -1,39 +1,37 @@
 import { useCallback } from 'react';
 import { chatService } from '@/services/api';
 import { useChatStore } from '@/store/chatStore';
-import { ChatMessage, ChatOptions, OriginalChatMessage, convertFromHuihuaFormat } from '@/types';
+import { ChatMessage, ChatOptions, OriginalChatMessage } from '@/types';
+import { useI18n } from '@/i18n';
 
 export const useChat = () => {
-  const {
-    currentAgent,
-    messages,
-    preferences,
-    currentSession,
-    addMessage,
-    updateLastMessage,
-    setIsStreaming,
-    setStreamingStatus,
-    createNewSession,  // 新的创建会话方法
-  } = useChatStore();
-
+  const { t } = useI18n();
   const sendMessage = useCallback(async (
     content: string,
     options?: ChatOptions
   ) => {
+    const state = useChatStore.getState();
+    const { currentAgent, currentSession, preferences } = state;
+
     if (!currentAgent) {
-      throw new Error('没有选择智能体');
+      throw new Error(t('没有选择智能体'));
     }
 
     // 如果没有当前会话，创建一个（huihua.md 要求）
     if (!currentSession) {
-      createNewSession();
+      state.createNewSession();
     }
+
+    const latestState = useChatStore.getState();
+    const activeSession = latestState.currentSession;
 
     // 添加用户消息（按 huihua.md 格式）
     const userMessage: ChatMessage = {
-      HUMAN: content
+      HUMAN: content,
+      ...(options?.attachments ? { attachments: options.attachments } : {}),
+      ...(options?.voiceNote ? { voiceNote: options.voiceNote } : {}),
     };
-    addMessage(userMessage);
+    useChatStore.getState().addMessage(userMessage);
 
     // 生成本次 AI 响应的唯一 dataId，并作为 FastGPT responseChatItemId
     const responseId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -43,19 +41,25 @@ export const useChat = () => {
       AI: '',
       id: responseId
     };
-    addMessage(assistantMessage);
+    useChatStore.getState().addMessage(assistantMessage);
 
     // 读取用于 chatId 的会话 id（首条消息已创建会话时需要从最新状态获取）
     let sessionIdForChat: string | undefined;
-    if (!currentSession) {
-      const { currentSession: latestSession } = useChatStore.getState();
-      sessionIdForChat = latestSession?.id;
-    } else {
-      sessionIdForChat = currentSession.id;
-    }
+    sessionIdForChat = activeSession?.id;
 
     // 仅发送本次输入的消息，不打包历史消息
-    const chatMessages: OriginalChatMessage[] = convertFromHuihuaFormat([userMessage]);
+    const chatMessages: OriginalChatMessage[] = [
+      {
+        id: `${Date.now()}-user`,
+        role: 'user',
+        content,
+        timestamp: Date.now(),
+        metadata: {
+          ...(options?.attachments ? { attachments: options.attachments } : {}),
+          ...(options?.voiceNote ? { voiceNote: options.voiceNote } : {}),
+        },
+      },
+    ];
 
     // 透传 chatId 到后端（以会话 id 作为 chatId），保留其他 options
     const mergedOptions: ChatOptions | undefined = sessionIdForChat
@@ -63,33 +67,33 @@ export const useChat = () => {
       : { ...options, responseChatItemId: responseId };
 
     try {
-      setIsStreaming(true);
-      
+      useChatStore.getState().setIsStreaming(true);
+
       if (preferences.streamingEnabled) {
+        const controller = new AbortController();
+        useChatStore.getState().setStreamAbortController(controller);
         // 流式响应
         await chatService.sendStreamMessage(
           currentAgent.id,
           chatMessages,
-          (chunk) => {
-            updateLastMessage(chunk);
+          {
+            onChunk: (chunk) => {
+              useChatStore.getState().updateLastMessage(chunk);
+            },
+            onStatus: (status) => {
+              useChatStore.getState().setStreamingStatus(status);
+            },
+            onInteractive: (interactiveData) => {
+              try {
+                useChatStore.getState().addMessage({ interactive: interactiveData });
+              } catch (e) {
+                console.warn(t('处理 interactive 事件失败'), e, interactiveData);
+              }
+            },
+            onChatId: () => {},
+            signal: controller.signal,
           },
-          (status) => {
-            setStreamingStatus(status);
-          },
-          mergedOptions,
-          // onInteractive: 收到交互节点后，新增一条交互气泡
-          (interactiveData) => {
-            try {
-              // 直接以交互数据作为一条新消息渲染
-              addMessage({ interactive: interactiveData });
-            } catch (e) {
-              console.warn('处理 interactive 事件失败:', e, interactiveData);
-            }
-          },
-          // onChatId: 可选记录
-          (cid) => {
-            console.log('收到 chatId 事件:', cid);
-          }
+          mergedOptions
         );
       } else {
         // 非流式响应
@@ -98,29 +102,24 @@ export const useChat = () => {
           chatMessages,
           mergedOptions
         );
-        
+
         const assistantContent = response.choices[0]?.message?.content || '';
-        updateLastMessage(assistantContent);
+        useChatStore.getState().updateLastMessage(assistantContent);
       }
-      
+
     } catch (error) {
-      console.error('发送消息失败:', error);
-      updateLastMessage('抱歉，发送消息时出现错误。请稍后重试。');
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        useChatStore.getState().updateLastMessage(t('（生成已停止）'));
+      } else {
+        console.error(t('发送消息失败'), error);
+        useChatStore.getState().updateLastMessage(t('抱歉，发送消息时出现错误。请稍后重试。'));
+      }
     } finally {
-      setIsStreaming(false);
-      setStreamingStatus(null);
+      useChatStore.getState().setStreamAbortController(null);
+      useChatStore.getState().setIsStreaming(false);
+      useChatStore.getState().setStreamingStatus(null);
     }
-  }, [
-    currentAgent,
-    messages,
-    preferences.streamingEnabled,
-    currentSession,
-    addMessage,
-    updateLastMessage,
-    setIsStreaming,
-    setStreamingStatus,
-    createNewSession,
-  ]);
+  }, [t]);
 
   // 继续运行：交互节点-用户选择
   const continueInteractiveSelect = useCallback(async (value: string) => {

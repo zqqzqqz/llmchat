@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
 import dotenv from 'dotenv';
+import path from 'path';
 
 import { agentRoutes } from '@/routes/agents';
 import { chatRoutes } from '@/routes/chat';
@@ -59,6 +60,10 @@ app.use(compression({
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// 静态资源：附件上传目录
+const uploadsDir = path.resolve(__dirname, '../uploads');
+app.use('/uploads', express.static(uploadsDir));
 
 // 请求日志
 app.use(requestLogger);

@@ -11,6 +11,7 @@ import { ChatMessage, Agent, StreamStatus } from '@/types';
 import 'highlight.js/styles/github-dark.css';
 import { useChatStore } from '@/store/chatStore';
 import { chatService } from '@/services/api';
+import { useI18n } from '@/i18n';
 
 import avatarImg from '@/img/4.png';
 
@@ -38,6 +39,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({
   onInteractiveSelect,
   onInteractiveFormSubmit
 }) => {
+  const { t, locale } = useI18n();
   const [copied, setCopied] = useState(false);
   // 交互节点专用渲染（优先于普通 HUMAN/AI 文本）
   if (message.interactive) {
@@ -59,7 +61,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({
           <img src={avatarImg} alt="AI" className="w-8 h-8 rounded-full object-cover flex-shrink-0 ring-1 ring-border bg-muted" />
           <div className="bg-card rounded-2xl px-4 py-3 shadow-sm border border-border flex-1">
             <div className="text-sm text-foreground mb-3 whitespace-pre-wrap">
-              {data.params?.description || '请选择一个选项以继续'}
+              {data.params?.description || t('请选择一个选项以继续')}
             </div>
             <div className="flex items-center gap-2">
               <select
@@ -91,7 +93,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({
 
 
 
-                {(data as any).origin === 'init' ? '开始对话' : '确定'}
+                {(data as any).origin === 'init' ? t('开始对话') : t('确定')}
               </Button>
             </div>
           </div>
@@ -105,7 +107,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({
           <img src={avatarImg} alt="AI" className="w-8 h-8 rounded-full object-cover flex-shrink-0 ring-1 ring-border bg-muted" />
           <div className="bg-card rounded-2xl px-4 py-3 shadow-sm border border-border flex-1">
             <div className="text-sm text-gray-700 dark:text-gray-200 mb-3 whitespace-pre-wrap">
-              {data.params?.description || '请填写表单以继续'}
+              {data.params?.description || t('请填写表单以继续')}
             </div>
             <form
               className="space-y-3"
@@ -160,7 +162,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({
                   radius="md"
                   className="px-4 py-2 text-sm"
                 >
-                  {(data as any).origin === 'init' ? '开始对话' : '提交'}
+                  {(data as any).origin === 'init' ? t('开始对话') : t('提交')}
                 </Button>
               </div>
             </form>
@@ -211,7 +213,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({
         setMessageFeedback(message.id!, 'good');
       }
     } catch (e) {
-      console.error('点赞操作失败', e);
+      console.error(t('点赞操作失败'), e);
     }
   };
 
@@ -229,7 +231,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({
         setMessageFeedback(message.id!, 'bad');
       }
     } catch (e) {
-      console.error('点踩操作失败', e);
+      console.error(t('点踩操作失败'), e);
     }
   };
 
@@ -239,12 +241,12 @@ export const MessageItem: React.FC<MessageItemProps> = ({
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
-      console.error('复制失败:', err);
+      console.error(t('复制失败'), err);
     }
   };
 
   const formatTime = () => {
-    return new Date().toLocaleTimeString('zh-CN', {
+    return new Date().toLocaleTimeString(locale, {
       hour: '2-digit',
       minute: '2-digit'
     });
@@ -342,7 +344,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({
                   <span className="text-sm"></span>
                   {streamingStatus?.type === 'flowNodeStatus' && (
                     <>
-                      <span className="text-sm font-medium">{streamingStatus.moduleName || '未知模块'}</span>
+                      <span className="text-sm font-medium">{streamingStatus.moduleName || t('未知模块')}</span>
                       <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ml-1 ${
                         streamingStatus.status === 'error'
                           ? 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300'
@@ -371,7 +373,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({
                 onClick={handleCopy}
                 variant="ghost"
                 radius="md"
-                title="复制"
+                title={t('复制')}
               >
                 {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
               </IconButton>
@@ -382,7 +384,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({
                   variant="ghost"
                   radius="md"
                   className="text-muted-foreground hover:text-foreground"
-                  title="重新生成"
+                  title={t('重新生成')}
                 >
                   <RotateCcw className="h-4 w-4" />
                 </IconButton>
@@ -400,7 +402,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({
                         ? 'text-green-500'
                         : 'text-muted-foreground hover:text-foreground'
                     }`}
-                    title="点赞"
+                    title={t('点赞')}
                   >
                     <ThumbsUp className="h-4 w-4" />
                   </IconButton>
@@ -415,7 +417,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({
                         ? 'text-red-500'
                         : 'text-muted-foreground hover:text-foreground'
                     }`}
-                    title="点踩"
+                    title={t('点踩')}
                   >
                     <ThumbsDown className="h-4 w-4" />
                   </IconButton>

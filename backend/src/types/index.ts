@@ -62,11 +62,15 @@ export interface ChatMessage {
   id?: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
-  timestamp?: Date;
+  timestamp?: number;
+  attachments?: ChatAttachmentMetadata[];
+  voiceNote?: VoiceNoteMetadata | null;
   metadata?: {
     model?: string;
     tokens?: number;
     provider?: string;
+    attachments?: ChatAttachmentMetadata[];
+    voiceNote?: VoiceNoteMetadata | null;
   };
 }
 
@@ -82,6 +86,8 @@ export interface ChatOptions {
   // FastGPT 特有参数
   variables?: Record<string, any>; // 模块变量，会替换模块中输入框内容里的 [key]
   responseChatItemId?: string;     // 响应消息的 ID，FastGPT 会自动将该 ID 存入数据库
+  attachments?: ChatAttachmentMetadata[];
+  voiceNote?: VoiceNoteMetadata | null;
 }
 
 /**
@@ -154,12 +160,29 @@ export interface ChatSession {
   title: string;
   agentId: string;
   messages: ChatMessage[];
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: number;
+  updatedAt: number;
   metadata?: {
     totalTokens: number;
     messageCount: number;
   };
+}
+
+export interface ChatAttachmentMetadata {
+  id: string;
+  url: string;
+  name: string;
+  size: number;
+  mimeType: string;
+  source?: 'upload' | 'voice' | 'external';
+}
+
+export interface VoiceNoteMetadata {
+  id: string;
+  url: string;
+  duration: number;
+  mimeType: string;
+  size?: number;
 }
 
 /**

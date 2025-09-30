@@ -1,11 +1,23 @@
 import { Request, Response, NextFunction } from 'express';
 import axios from 'axios';
+import fs from 'fs/promises';
+import path from 'path';
+import Joi from 'joi';
+
 import { AgentConfigService } from '@/services/AgentConfigService';
 import { ChatProxyService } from '@/services/ChatProxyService';
 import { ChatInitService } from '@/services/ChatInitService';
-import { ChatMessage, ChatOptions, ApiError, StreamStatus } from '@/types';
-import { generateId } from '@/utils/helpers';
-import Joi from 'joi';
+import { ChatHistoryService } from '@/services/ChatHistoryService';
+import { analyticsService } from '@/services/analyticsInstance';
+import {
+  ChatMessage,
+  ChatOptions,
+  ApiError,
+  StreamStatus,
+  ChatAttachmentMetadata,
+  VoiceNoteMetadata,
+} from '@/types';
+import { generateId, formatFileSize } from '@/utils/helpers';
 
 /**
  * 聊天控制器
@@ -14,11 +26,15 @@ export class ChatController {
   private agentService: AgentConfigService;
   private chatService: ChatProxyService;
   private initService: ChatInitService;
+  private historyService: ChatHistoryService;
+  private uploadDir: string;
 
   constructor() {
     this.agentService = new AgentConfigService();
     this.chatService = new ChatProxyService(this.agentService);
     this.initService = new ChatInitService(this.agentService);
+    this.historyService = new ChatHistoryService();
+    this.uploadDir = path.resolve(__dirname, '../../uploads');
   }
 
   /**
@@ -49,7 +65,24 @@ export class ChatController {
           'string.empty': '消息内容不能为空',
         }),
         id: Joi.string().optional(),
-        timestamp: Joi.date().optional(),
+        timestamp: Joi.number().optional(),
+        attachments: Joi.array().items(
+          Joi.object({
+            id: Joi.string().optional(),
+            url: Joi.string().uri().optional(),
+            name: Joi.string().required(),
+            mimeType: Joi.string().required(),
+            size: Joi.number().min(0).required(),
+            source: Joi.string().valid('upload', 'voice', 'external').optional(),
+          })
+        ).optional(),
+        voiceNote: Joi.object({
+          id: Joi.string().optional(),
+          url: Joi.string().uri().optional(),
+          duration: Joi.number().min(0).required(),
+          mimeType: Joi.string().required(),
+          size: Joi.number().min(0).optional(),
+        }).optional(),
         metadata: Joi.object().optional(),
       })
     ).min(1).required().messages({
@@ -76,6 +109,23 @@ export class ChatController {
       variables: Joi.object().optional(),
       responseChatItemId: Joi.string().optional(),
     }).optional(),
+    attachments: Joi.array().items(
+      Joi.object({
+        id: Joi.string().optional(),
+        url: Joi.string().uri().optional(),
+        name: Joi.string().required(),
+        mimeType: Joi.string().required(),
+        size: Joi.number().min(0).required(),
+        source: Joi.string().valid('upload', 'voice', 'external').optional(),
+      })
+    ).optional(),
+    voiceNote: Joi.object({
+      id: Joi.string().optional(),
+      url: Joi.string().uri().optional(),
+      duration: Joi.number().min(0).required(),
+      mimeType: Joi.string().required(),
+      size: Joi.number().min(0).optional(),
+    }).optional(),
   });
   /**
    * 点赞/点踩反馈请求验证Schema
@@ -96,6 +146,169 @@ export class ChatController {
     userGoodFeedback: Joi.string().optional(),
     userBadFeedback: Joi.string().optional(),
   });
+  private attachmentUploadSchema = Joi.object({
+    filename: Joi.string().max(256).required(),
+    mimeType: Joi.string().max(128).required(),
+    size: Joi.number().min(1).max(20 * 1024 * 1024).required(),
+    data: Joi.string().required(),
+    source: Joi.string().valid('upload', 'voice', 'external').optional(),
+  });
+
+  private decorateMessages(
+    messages: ChatMessage[],
+    attachments?: ChatAttachmentMetadata[] | null,
+    voiceNote?: VoiceNoteMetadata | null
+  ): ChatMessage[] {
+    const list = (messages || []).map((msg) => ({
+      ...msg,
+      metadata: msg.metadata ? { ...msg.metadata } : undefined,
+      attachments: msg.attachments ? [...msg.attachments] : undefined,
+      voiceNote: msg.voiceNote ?? null,
+    }));
+
+    if ((!attachments || attachments.length === 0) && !voiceNote) {
+      return list;
+    }
+
+    const index = this.findLastUserMessageIndex(list);
+    if (index === -1) {
+      return list;
+    }
+
+    const target = list[index];
+    const summary: string[] = [];
+    const mergedAttachments: ChatAttachmentMetadata[] = target.attachments
+      ? [...target.attachments]
+      : [];
+
+    if (attachments && attachments.length > 0) {
+      attachments.forEach((att, idx) => {
+        mergedAttachments.push(att);
+        summary.push(
+          `附件${idx + 1}: ${att.name} (${formatFileSize(att.size)}) -> ${att.url}`
+        );
+      });
+    }
+
+    if (voiceNote) {
+      summary.push(
+        `语音: ${voiceNote.duration.toFixed(1)} 秒 (${voiceNote.mimeType}) -> ${voiceNote.url}`
+      );
+    }
+
+    if (summary.length > 0) {
+      target.content = `${target.content}\n\n${summary.join('\n')}`.trim();
+    }
+
+    target.attachments = mergedAttachments.length ? mergedAttachments : undefined;
+    const finalVoice = voiceNote || target.voiceNote || null;
+    target.voiceNote = finalVoice;
+    target.metadata = {
+      ...(target.metadata || {}),
+      ...(mergedAttachments.length ? { attachments: mergedAttachments } : {}),
+      ...(finalVoice ? { voiceNote: finalVoice } : {}),
+    };
+
+    return list;
+  }
+
+  private findLastUserMessageIndex(messages: ChatMessage[]): number {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      if (messages[i]?.role === 'user') {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  private findLastUserMessage(messages: ChatMessage[]): ChatMessage | null {
+    const index = this.findLastUserMessageIndex(messages);
+    return index >= 0 ? messages[index] : null;
+  }
+
+  private resolveClientIp(req: Request): string | null {
+    const forwarded = req.headers['x-forwarded-for'];
+    if (Array.isArray(forwarded) && forwarded.length > 0) {
+      return forwarded[0];
+    }
+    if (typeof forwarded === 'string' && forwarded.trim()) {
+      return forwarded;
+    }
+
+    const realIp = req.headers['x-real-ip'];
+    if (Array.isArray(realIp) && realIp.length > 0) {
+      return realIp[0];
+    }
+    if (typeof realIp === 'string' && realIp.trim()) {
+      return realIp;
+    }
+
+    if (typeof req.ip === 'string' && req.ip.trim()) {
+      return req.ip;
+    }
+
+    const socketAddress = req.socket && typeof req.socket.remoteAddress === 'string'
+      ? req.socket.remoteAddress
+      : null;
+    return socketAddress;
+  }
+
+  private async recordGeoSnapshot(req: Request, agentId: string, sessionId?: string | null): Promise<void> {
+    try {
+      const ip = this.resolveClientIp(req);
+      await analyticsService.recordAgentRequest({
+        agentId,
+        sessionId: sessionId || null,
+        ip: ip || null,
+      });
+    } catch (error) {
+      console.warn('[ChatController] 记录地域分析失败:', error);
+    }
+  }
+
+  private buildSessionTitle(messages: ChatMessage[]): string {
+    const lastUser = this.findLastUserMessage(messages);
+    if (!lastUser) {
+      return '新对话';
+    }
+    const content = (lastUser.content || '').replace(/\s+/g, ' ').trim();
+    if (!content) {
+      return '新对话';
+    }
+    return content.length > 30 ? `${content.slice(0, 30)}...` : content;
+  }
+
+  private async recordUserHistory(
+    sessionId: string,
+    agentId: string,
+    messages: ChatMessage[],
+    attachments?: ChatAttachmentMetadata[] | null,
+    voiceNote?: VoiceNoteMetadata | null
+  ): Promise<void> {
+    const lastUser = this.findLastUserMessage(messages);
+    if (!lastUser) {
+      return;
+    }
+    const metadata = (attachments && attachments.length) || voiceNote
+      ? {
+          attachments: attachments && attachments.length ? attachments : undefined,
+          voiceNote: voiceNote || null,
+        }
+      : undefined;
+    try {
+      await this.historyService.appendMessage({
+        sessionId,
+        agentId,
+        role: 'user',
+        content: lastUser.content,
+        metadata,
+        messageId: lastUser.id,
+        titleHint: this.buildSessionTitle(messages),
+      });
+    } catch (error) {
+      console.warn('[ChatController] 记录用户消息失败:', error);
+    }
+  }
 
   /**
    * 发送聊天请求
@@ -116,6 +329,9 @@ export class ChatController {
       }
 
       const { agentId, messages, stream } = value as any;
+      const attachments: ChatAttachmentMetadata[] | undefined = value.attachments;
+      const voiceNote: VoiceNoteMetadata | undefined = value.voiceNote;
+
       // 统一兼容：顶层与 options 的混用，归一化为 ChatOptions
       const normalizedOptions: ChatOptions = {
         ...(value.options || {}),
@@ -125,14 +341,18 @@ export class ChatController {
         ...(typeof value.maxTokens === 'number' ? { maxTokens: value.maxTokens } : {}),
         ...(value.variables ? { variables: value.variables } : {}),
         ...(value.responseChatItemId ? { responseChatItemId: value.responseChatItemId } : {}),
+        ...(attachments ? { attachments } : {}),
+        ...(voiceNote ? { voiceNote } : {}),
       };
 
-      console.log('🧪 [chatCompletions] 入参(归一化): ', {
-        agentId,
-        stream,
-        options: normalizedOptions,
-        messagesCount: Array.isArray(messages) ? messages.length : 0,
-      });
+      const sessionId = normalizedOptions.chatId || value.chatId || generateId();
+      normalizedOptions.chatId = sessionId;
+
+      const decoratedMessages = this.decorateMessages(
+        Array.isArray(messages) ? messages : [],
+        attachments,
+        voiceNote
+      );
 
       // 检查智能体是否存在
       const agent = await this.agentService.getAgent(agentId);
@@ -156,11 +376,50 @@ export class ChatController {
         return;
       }
 
+      await this.historyService.ensureSession(
+        sessionId,
+        agentId,
+        this.buildSessionTitle(decoratedMessages)
+      );
+
+      await this.recordGeoSnapshot(req, agentId, sessionId);
+
+      await this.recordUserHistory(
+        sessionId,
+        agentId,
+        decoratedMessages,
+        attachments,
+        voiceNote
+      );
+
+      console.log('🧪 [chatCompletions] 入参(归一化): ', {
+        agentId,
+        stream,
+        options: normalizedOptions,
+        messagesCount: decoratedMessages.length,
+      });
+
       // 处理流式请求
       if (stream) {
-        await this.handleStreamRequest(res, agentId, messages, normalizedOptions);
+        await this.handleStreamRequest(
+          res,
+          agentId,
+          decoratedMessages,
+          normalizedOptions,
+          sessionId,
+          attachments,
+          voiceNote || null
+        );
       } else {
-        await this.handleNormalRequest(res, agentId, messages, normalizedOptions);
+        await this.handleNormalRequest(
+          res,
+          agentId,
+          decoratedMessages,
+          normalizedOptions,
+          sessionId,
+          attachments,
+          voiceNote || null
+        );
       }
     } catch (error) {
       console.error('聊天请求处理失败:', error);
@@ -191,14 +450,33 @@ export class ChatController {
     res: Response,
     agentId: string,
     messages: ChatMessage[],
-    options?: ChatOptions
+    options: ChatOptions | undefined,
+    sessionId: string,
+    _attachments?: ChatAttachmentMetadata[] | null,
+    _voiceNote?: VoiceNoteMetadata | null
   ): Promise<void> {
     try {
       const response = await this.chatService.sendMessage(agentId, messages, options);
+      const assistantContent =
+        response?.choices?.[0]?.message?.content || '';
+
+      try {
+        await this.historyService.appendMessage({
+          sessionId,
+          agentId,
+          role: 'assistant',
+          content: assistantContent,
+          metadata: options?.responseChatItemId
+            ? { responseChatItemId: options.responseChatItemId }
+            : undefined,
+        });
+      } catch (error) {
+        console.warn('[ChatController] 记录助手消息失败:', error);
+      }
 
       res.json({
         success: true,
-        data: response,
+        data: { ...response, chatId: sessionId },
         timestamp: new Date().toISOString(),
       });
     } catch (error) {
@@ -219,7 +497,10 @@ export class ChatController {
     res: Response,
     agentId: string,
     messages: ChatMessage[],
-    options?: ChatOptions
+    options: ChatOptions | undefined,
+    sessionId: string,
+    _attachments?: ChatAttachmentMetadata[] | null,
+    _voiceNote?: VoiceNoteMetadata | null
   ): Promise<void> {
     try {
       // 标准 SSE 响应头
@@ -236,11 +517,14 @@ export class ChatController {
       console.log('🚀 开始处理流式请求，智能体:', agentId);
 
       // 发送初始化事件
+      this.sendSSEEvent(res, 'chatId', { chatId: sessionId });
       this.sendSSEEvent(res, 'start', {
         id: generateId(),
         timestamp: new Date().toISOString(),
         agentId,
       });
+
+      let assistantContent = '';
 
       // 发送流式消息
       await this.chatService.sendStreamMessage(
@@ -249,6 +533,7 @@ export class ChatController {
         // 内容回调 - 确保正确调用
         (chunk: string) => {
           console.log('📨 收到内容块:', chunk.substring(0, 50));
+          assistantContent += chunk;
           this.sendSSEEvent(res, 'chunk', { content: chunk });
         },
         // 状态回调 - 确保正确调用
@@ -280,7 +565,23 @@ export class ChatController {
             console.log('📎 收到未分类透传事件:', eventName);
           }
         }
-      );
+        );
+
+      if (assistantContent) {
+        try {
+          await this.historyService.appendMessage({
+            sessionId,
+            agentId,
+            role: 'assistant',
+            content: assistantContent,
+            metadata: options?.responseChatItemId
+              ? { responseChatItemId: options.responseChatItemId }
+              : undefined,
+          });
+        } catch (error) {
+          console.warn('[ChatController] 记录流式助手消息失败:', error);
+        }
+      }
     } catch (error) {
       console.error('❌ 流式聊天请求失败:', error);
 
@@ -350,6 +651,8 @@ export class ChatController {
         res.status(400).json(apiError);
         return;
       }
+
+      await this.recordGeoSnapshot(req, agent.id, typeof chatId === 'string' ? chatId : null);
 
       // 根据stream参数决定处理方式
       if (stream) {
@@ -631,6 +934,83 @@ export class ChatController {
   };
 
 
+  private async ensureUploadDirectory(): Promise<void> {
+    try {
+      await fs.mkdir(this.uploadDir, { recursive: true });
+    } catch (error) {
+      console.warn('[ChatController] 创建上传目录失败:', error);
+    }
+  }
+
+  private sanitizeFilename(filename: string): string {
+    return filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+  }
+
+  uploadAttachment = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { error, value } = this.attachmentUploadSchema.validate(req.body);
+      if (error) {
+        res.status(400).json({
+          code: 'VALIDATION_ERROR',
+          message: error?.details?.[0]?.message || '附件参数校验失败',
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
+
+      const buffer = Buffer.from(value.data, 'base64');
+      if (!buffer || buffer.length === 0) {
+        res.status(400).json({
+          code: 'INVALID_ATTACHMENT',
+          message: '附件内容不能为空',
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
+
+      if (buffer.length > value.size * 1.2) {
+        res.status(400).json({
+          code: 'INVALID_ATTACHMENT',
+          message: '附件大小与声明不符',
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
+
+      await this.ensureUploadDirectory();
+
+      const fileId = generateId();
+      const safeName = this.sanitizeFilename(value.filename);
+      const finalName = `${fileId}-${safeName}`;
+      const filePath = path.join(this.uploadDir, finalName);
+
+      await fs.writeFile(filePath, buffer);
+
+      const metadata: ChatAttachmentMetadata = {
+        id: fileId,
+        name: value.filename,
+        mimeType: value.mimeType,
+        size: buffer.length,
+        url: `/uploads/${finalName}`,
+        source: value.source || 'upload',
+      };
+
+      res.json({
+        success: true,
+        data: metadata,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error('[ChatController] 上传附件失败:', error);
+      res.status(500).json({
+        code: 'ATTACHMENT_UPLOAD_FAILED',
+        message: '上传附件失败',
+        timestamp: new Date().toISOString(),
+      });
+    }
+  };
+
+
   /**
    * 获取聊天历史（如果有实现）
    * GET /api/chat/history/:sessionId
@@ -638,15 +1018,43 @@ export class ChatController {
   getChatHistory = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { sessionId } = req.params;
+      const limitRaw = req.query.limit;
+      const offsetRaw = req.query.offset;
+      const roleRaw = req.query.role;
 
-      // TODO: 实现聊天历史获取逻辑
+      const limit = limitRaw ? parseInt(String(limitRaw), 10) : undefined;
+      const offset = offsetRaw ? parseInt(String(offsetRaw), 10) : undefined;
+      let roles: Array<'user' | 'assistant' | 'system'> | undefined;
+
+      if (roleRaw) {
+        const roleList = Array.isArray(roleRaw)
+          ? roleRaw
+          : String(roleRaw).split(',');
+        roles = roleList
+          .map((r) => r.trim())
+          .filter((r): r is 'user' | 'assistant' | 'system' =>
+            ['user', 'assistant', 'system'].includes(r)
+          );
+      }
+
+      const history = await this.historyService.getHistory(sessionId, {
+        limit,
+        offset,
+        roles,
+      });
+
+      if (!history.session) {
+        res.status(404).json({
+          code: 'SESSION_NOT_FOUND',
+          message: `未找到会话: ${sessionId}`,
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
+
       res.json({
         success: true,
-        data: {
-          sessionId,
-          messages: [],
-          message: '聊天历史功能暂未实现',
-        },
+        data: history,
         timestamp: new Date().toISOString(),
       });
     } catch (error) {

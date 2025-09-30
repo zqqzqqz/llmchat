@@ -3,18 +3,20 @@ import { ChevronDown, Bot, Wifi, WifiOff } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useChatStore } from '@/store/chatStore';
 import { useAgents } from '@/hooks/useAgents';
+import { useI18n } from '@/i18n';
 
 export const AgentSelector: React.FC = () => {
-  const { 
-    agents, 
-    currentAgent, 
+  const {
+    agents,
+    currentAgent,
     agentSelectorOpen,
     setCurrentAgent,
-    setAgentSelectorOpen 
+    setAgentSelectorOpen
   } = useChatStore();
-  
+
   const { fetchAgents, loading } = useAgents();
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const { t } = useI18n();
 
   useEffect(() => {
     fetchAgents();
@@ -79,7 +81,7 @@ export const AgentSelector: React.FC = () => {
           <Bot className="h-4 w-4 flex-shrink-0 text-brand drop-shadow-sm" />
           <div className="min-w-0 flex-1">
             <div className="truncate font-medium">
-              {currentAgent?.name || '选择智能体'}
+              {currentAgent?.name || t('选择智能体')}
             </div>
             {/* 移除 provider/model/wifi 显示，保持仅展示名称 */}
           </div>
@@ -107,12 +109,12 @@ export const AgentSelector: React.FC = () => {
                 <div className="p-4 text-center">
                   <div className="inline-flex items-center gap-2 text-gray-500 dark:text-gray-400">
                     <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                    加载中...
+                    {t('加载中...')}
                   </div>
                 </div>
               ) : agents.length === 0 ? (
                 <div className="p-4 text-center text-gray-500 dark:text-gray-400">
-                  暂无可用的智能体
+                  {t('暂无可用的智能体')}
                 </div>
               ) : (
                 <div className="py-2">

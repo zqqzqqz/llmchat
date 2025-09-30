@@ -5,6 +5,7 @@ import { useChatStore } from '@/store/chatStore';
 import { useChat } from '@/hooks/useChat';
 import { Bot, Sparkles } from 'lucide-react';
 import { chatService } from '@/services/api';
+import { useI18n } from '@/i18n';
 
 export const ChatContainer: React.FC = () => {
   const {
@@ -17,8 +18,11 @@ export const ChatContainer: React.FC = () => {
     updateLastMessage,
     setIsStreaming,
     createNewSession,
+    stopStreaming,
+    setStreamAbortController,
   } = useChatStore();
   const { sendMessage, continueInteractiveSelect, continueInteractiveForm } = useChat();
+  const { t } = useI18n();
 
   // 避免重复触发同一会话/智能体的开场白
   const welcomeTriggeredKeyRef = useRef<string | null>(null);
@@ -41,7 +45,7 @@ export const ChatContainer: React.FC = () => {
           origin: 'init' as const,
           params: {
             varKey: v.key,
-            description: v.description || v.label || '请选择一个选项以继续',
+            description: v.description || v.label || t('请选择一个选项以继续'),
             userSelectOptions: (v.list || []).map((opt: any) => ({
               key: String(opt.value),              // 发送值
               value: String(opt.label ?? opt.value) // 显示文本
@@ -60,7 +64,7 @@ export const ChatContainer: React.FC = () => {
         return {
           type: mappedType,
           key: v.key || `field_${idx}`,
-          label: v.label || v.key || `字段${idx + 1}`,
+          label: v.label || v.key || t('字段{index}', { index: idx + 1 }),
           description: v.description || '',
           value: v.defaultValue ?? '',
           defaultValue: v.defaultValue ?? '',
@@ -74,14 +78,14 @@ export const ChatContainer: React.FC = () => {
         type: 'userInput' as const,
         origin: 'init' as const,
         params: {
-          description: '请填写以下信息以继续',
+          description: t('请填写以下信息以继续'),
           inputForm
         }
       };
       addMessage({ interactive });
       setHideComposer(true);
     } catch (e) {
-      console.warn('渲染 variables 失败:', e);
+      console.warn(t('渲染 variables 失败'), e);
     }
   };
 
@@ -110,10 +114,14 @@ export const ChatContainer: React.FC = () => {
   };
 
   // 发送消息：若存在 init 变量，则在首次发送时一并携带
-  const handleSendMessage = async (content: string) => {
+  const handleSendMessage = async (content: string, extraOptions?: any) => {
     const vars = pendingInitVars || undefined;
-    const options = vars ? { variables: vars, detail: true } : { detail: true };
-    await sendMessage(content, options);
+    const mergedOptions = {
+      ...(extraOptions || {}),
+      ...(vars ? { variables: vars } : {}),
+      detail: true,
+    };
+    await sendMessage(content, mergedOptions);
     if (vars) setPendingInitVars(null);
   };
 
@@ -144,6 +152,8 @@ export const ChatContainer: React.FC = () => {
 
       try {
         if (preferences.streamingEnabled) {
+          const controller = new AbortController();
+          setStreamAbortController(controller);
           await chatService.initStream(
             currentAgent.id,
             sessionId,
@@ -153,25 +163,38 @@ export const ChatContainer: React.FC = () => {
             (initData) => {
               // 流式开场白完成后，根据 variables 渲染交互气泡
               renderVariablesAsInteractive(initData);
-            }
+            },
+            { signal: controller.signal }
           );
         } else {
           const data = await chatService.init(currentAgent.id, sessionId);
+          const descriptionSuffix = currentAgent.description
+            ? t('：{description}', { description: currentAgent.description })
+            : '';
           const content =
             data?.welcomeText ||
             data?.app?.chatConfig?.welcomeText ||
             data?.content ||
-            `你好，我是 ${currentAgent.name}${currentAgent.description ? '：' + currentAgent.description : ''}`;
+            t('你好，我是 {name}{description}', {
+              name: currentAgent.name,
+              description: descriptionSuffix,
+            });
           updateLastMessage(content);
           // 非流式初始化后渲染 variables 为交互气泡
           renderVariablesAsInteractive(data);
 
         }
       } catch (e) {
-        console.error('开场白加载失败:', e);
-        const fallback = `你好，我是 ${currentAgent.name}${currentAgent.description ? '：' + currentAgent.description : ''}`;
+        console.error(t('开场白加载失败'), e);
+        const fallback = t('你好，我是 {name}{description}', {
+          name: currentAgent.name,
+          description: currentAgent.description
+            ? t('：{description}', { description: currentAgent.description })
+            : '',
+        });
         updateLastMessage(fallback);
       } finally {
+        setStreamAbortController(null);
         setIsStreaming(false);
       }
     };
@@ -190,10 +213,10 @@ export const ChatContainer: React.FC = () => {
             <Bot className="h-8 w-8 text-white" />
           </div>
           <h2 className="text-2xl font-semibold text-foreground mb-3">
-            欢迎使用 LLMChat
+            {t('欢迎使用 LLMChat')}
           </h2>
           <p className="text-muted-foreground mb-6">
-            请选择一个智能体开始您的对话之旅
+            {t('请选择一个智能体开始您的对话之旅')}
           </p>
         </div>
       </div>
@@ -211,7 +234,7 @@ export const ChatContainer: React.FC = () => {
               <Sparkles className="h-10 w-10 text-white" />
             </div>
             <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
-              与 {currentAgent.name} 对话
+              {t('与 {name} 对话', { name: currentAgent.name })}
             </h2>
             <p className="text-lg text-gray-600 dark:text-gray-400 mb-8">
               {currentAgent.description}
@@ -220,24 +243,24 @@ export const ChatContainer: React.FC = () => {
             {/* 示例提示 */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
               <div className="p-4 bg-background rounded-xl border border-border hover:bg-brand/10 transition-colors cursor-pointer"
-                onClick={() => sendMessage('你好，请介绍一下你的能力')}
+                onClick={() => sendMessage(t('你好，请介绍一下你的能力'))}
               >
                 <h3 className="font-medium text-foreground mb-2">
-                  👋 介绍与能力
+                  👋 {t('介绍与能力')}
                 </h3>
                 <p className="text-sm text-muted-foreground">
-                  了解智能体的功能与特点
+                  {t('了解智能体的功能与特点')}
                 </p>
               </div>
 
               <div className="p-4 bg-background rounded-xl border border-border hover:bg-brand/10 transition-colors cursor-pointer"
-                onClick={() => sendMessage('你能帮我做什么？')}
+                onClick={() => sendMessage(t('你能帮我做什么？'))}
               >
                 <h3 className="font-medium text-gray-900 dark:text-white mb-2">
-                  ❓ 探索功能
+                  ❓ {t('探索功能')}
                 </h3>
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                  发现更多实用功能
+                  {t('发现更多实用功能')}
                 </p>
               </div>
             </div>
@@ -250,8 +273,9 @@ export const ChatContainer: React.FC = () => {
             {!hideComposer && (
               <MessageInput
                 onSendMessage={handleSendMessage}
-                disabled={isStreaming}
-                placeholder={`与 ${currentAgent.name} 对话...`}
+                isStreaming={isStreaming}
+                onStopStreaming={stopStreaming}
+                placeholder={t('与 {name} 对话...', { name: currentAgent.name })}
               />
             )}
           </div>
@@ -276,8 +300,9 @@ export const ChatContainer: React.FC = () => {
           {!hideComposer && (
             <MessageInput
               onSendMessage={handleSendMessage}
-              disabled={isStreaming}
-              placeholder={`与 ${currentAgent.name} 对话...`}
+              isStreaming={isStreaming}
+              onStopStreaming={stopStreaming}
+              placeholder={t('与 {name} 对话...', { name: currentAgent.name })}
             />
           )}
         </div>

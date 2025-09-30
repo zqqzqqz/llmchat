@@ -6,10 +6,12 @@ import LoginPage from '@/components/admin/LoginPage';
 import AdminHome from '@/components/admin/AdminHome';
 import { useAuthStore } from '@/store/authStore';
 import { Toaster, toast } from '@/components/ui/Toast';
+import { useI18n } from '@/i18n';
 
 function ProtectedRoute({ children }: { children: JSX.Element }) {
   const location = useLocation();
   const isAuthed = useAuthStore((s) => s.isAuthenticated());
+  const { t } = useI18n();
   const fired = (globalThis as any).__auth_toast_fired ?? new Set<string>();
   (globalThis as any).__auth_toast_fired = fired;
 
@@ -19,10 +21,10 @@ function ProtectedRoute({ children }: { children: JSX.Element }) {
       const key = location.pathname + location.search;
       if (!fired.has(key)) {
         fired.add(key);
-        toast({ type: 'warning', title: '请先登录' });
+        toast({ type: 'warning', title: t('请先登录') });
       }
     }
-  }, [isAuthed, location.pathname, location.search]);
+  }, [isAuthed, location.pathname, location.search, t]);
 
   if (isAuthed) return children;
   const target = location.pathname + (location.search || '');
