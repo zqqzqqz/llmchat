@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import os from 'os';
 import { authService } from '@/services/authInstance';
 import { withClient, hashPassword } from '@/utils/db';
+import { analyticsService } from '@/services/analyticsInstance';
 
 // 使用全局单例的 authService（见 services/authInstance.ts）
 
@@ -16,6 +17,27 @@ async function ensureAdminAuth(req: Request) {
   const user = await ensureAuth(req);
   if (!user || user.role !== 'admin') throw new Error('UNAUTHORIZED');
   return user;
+}
+
+function parseDateInput(value?: string): Date | null {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+  return date;
+}
+
+function startOfDay(date: Date): Date {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function endOfDay(date: Date): Date {
+  const d = new Date(date);
+  d.setHours(23, 59, 59, 999);
+  return d;
 }
 
 export class AdminController {
@@ -127,6 +149,240 @@ export class AdminController {
       return res.status(200).send(header + body);
     } catch (e: any) {
       return res.status(401).json({ code: 'UNAUTHORIZED', message: '未授权', timestamp: new Date().toISOString() });
+    }
+  }
+
+  static async provinceHeatmap(req: Request, res: Response) {
+    try {
+      await ensureAdminAuth(req);
+
+      const { start: startRaw, end: endRaw, agentId } = req.query as {
+        start?: string;
+        end?: string;
+        agentId?: string;
+      };
+
+      const parsedStart = startRaw ? parseDateInput(startRaw) : null;
+      if (startRaw && !parsedStart) {
+        return res.status(400).json({
+          code: 'BAD_REQUEST',
+          message: 'start 参数格式不合法',
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      const parsedEnd = endRaw ? parseDateInput(endRaw) : null;
+      if (endRaw && !parsedEnd) {
+        return res.status(400).json({
+          code: 'BAD_REQUEST',
+          message: 'end 参数格式不合法',
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      const now = new Date();
+      let startDate = parsedStart ? new Date(parsedStart) : startOfDay(now);
+      let endDate = parsedEnd ? new Date(parsedEnd) : endOfDay(now);
+
+      if (!parsedStart) {
+        startDate = startOfDay(startDate);
+      }
+      if (!parsedEnd) {
+        endDate = endOfDay(endDate);
+      }
+
+      if (startDate.getTime() > endDate.getTime()) {
+        return res.status(400).json({
+          code: 'BAD_REQUEST',
+          message: '开始时间必须早于结束时间',
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      const maxRangeMs = 60 * 24 * 60 * 60 * 1000; // 60 天
+      if (endDate.getTime() - startDate.getTime() > maxRangeMs) {
+        return res.status(400).json({
+          code: 'BAD_REQUEST',
+          message: '时间范围不能超过60天',
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      const filterAgentId = agentId && agentId !== 'all' ? agentId : null;
+
+      const data = await analyticsService.getProvinceHeatmap({
+        start: startDate,
+        end: endDate,
+        agentId: filterAgentId,
+      });
+
+      return res.json({ data });
+    } catch (error: any) {
+      if (error?.message === 'UNAUTHORIZED') {
+        return res.status(401).json({
+          code: 'UNAUTHORIZED',
+          message: '未授权',
+          timestamp: new Date().toISOString(),
+        });
+      }
+      console.error('[AdminController] provinceHeatmap failed:', error);
+      return res.status(500).json({
+        code: 'INTERNAL_ERROR',
+        message: '获取地域热点数据失败',
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }
+
+  static async conversationSeries(req: Request, res: Response) {
+    try {
+      await ensureAdminAuth(req);
+
+      const { start: startRaw, end: endRaw, agentId } = req.query as {
+        start?: string;
+        end?: string;
+        agentId?: string;
+      };
+
+      const parsedStart = startRaw ? parseDateInput(startRaw) : null;
+      if (startRaw && !parsedStart) {
+        return res.status(400).json({
+          code: 'BAD_REQUEST',
+          message: 'start 参数格式不合法',
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      const parsedEnd = endRaw ? parseDateInput(endRaw) : null;
+      if (endRaw && !parsedEnd) {
+        return res.status(400).json({
+          code: 'BAD_REQUEST',
+          message: 'end 参数格式不合法',
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      const now = new Date();
+      let startDate = parsedStart ? new Date(parsedStart) : new Date(now.getFullYear(), now.getMonth(), 1);
+      let endDate = parsedEnd ? new Date(parsedEnd) : endOfDay(now);
+
+      startDate = startOfDay(startDate);
+      endDate = endOfDay(endDate);
+
+      if (startDate.getTime() > endDate.getTime()) {
+        return res.status(400).json({
+          code: 'BAD_REQUEST',
+          message: '开始时间必须早于结束时间',
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      const maxRangeMs = 90 * 24 * 60 * 60 * 1000; // 最长 90 天
+      if (endDate.getTime() - startDate.getTime() > maxRangeMs) {
+        return res.status(400).json({
+          code: 'BAD_REQUEST',
+          message: '时间范围不能超过90天',
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      const filterAgentId = agentId && agentId !== 'all' ? agentId : null;
+
+      const data = await analyticsService.getConversationSeries({
+        start: startDate,
+        end: endDate,
+        agentId: filterAgentId,
+      });
+
+      return res.json({ data });
+    } catch (error: any) {
+      if (error?.message === 'UNAUTHORIZED') {
+        return res.status(401).json({
+          code: 'UNAUTHORIZED',
+          message: '未授权',
+          timestamp: new Date().toISOString(),
+        });
+      }
+      console.error('[AdminController] conversationSeries failed:', error);
+      return res.status(500).json({
+        code: 'INTERNAL_ERROR',
+        message: '获取智能体对话趋势失败',
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }
+
+  static async conversationAgents(req: Request, res: Response) {
+    try {
+      await ensureAdminAuth(req);
+
+      const { start: startRaw, end: endRaw } = req.query as {
+        start?: string;
+        end?: string;
+      };
+
+      const parsedStart = startRaw ? parseDateInput(startRaw) : null;
+      if (startRaw && !parsedStart) {
+        return res.status(400).json({
+          code: 'BAD_REQUEST',
+          message: 'start 参数格式不合法',
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      const parsedEnd = endRaw ? parseDateInput(endRaw) : null;
+      if (endRaw && !parsedEnd) {
+        return res.status(400).json({
+          code: 'BAD_REQUEST',
+          message: 'end 参数格式不合法',
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      const now = new Date();
+      let startDate = parsedStart ? new Date(parsedStart) : new Date(now.getFullYear(), now.getMonth(), 1);
+      let endDate = parsedEnd ? new Date(parsedEnd) : endOfDay(now);
+
+      startDate = startOfDay(startDate);
+      endDate = endOfDay(endDate);
+
+      if (startDate.getTime() > endDate.getTime()) {
+        return res.status(400).json({
+          code: 'BAD_REQUEST',
+          message: '开始时间必须早于结束时间',
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      const maxRangeMs = 180 * 24 * 60 * 60 * 1000;
+      if (endDate.getTime() - startDate.getTime() > maxRangeMs) {
+        return res.status(400).json({
+          code: 'BAD_REQUEST',
+          message: '时间范围不能超过180天',
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      const data = await analyticsService.getAgentTotals({
+        start: startDate,
+        end: endDate,
+      });
+
+      return res.json({ data });
+    } catch (error: any) {
+      if (error?.message === 'UNAUTHORIZED') {
+        return res.status(401).json({
+          code: 'UNAUTHORIZED',
+          message: '未授权',
+          timestamp: new Date().toISOString(),
+        });
+      }
+      console.error('[AdminController] conversationAgents failed:', error);
+      return res.status(500).json({
+        code: 'INTERNAL_ERROR',
+        message: '获取智能体会话对比失败',
+        timestamp: new Date().toISOString(),
+      });
     }
   }
 

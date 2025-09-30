@@ -10,4 +10,7 @@ adminRoutes.post('/users/update', AdminController.updateUser);
 adminRoutes.post('/users/reset-password', AdminController.resetUserPassword);
 adminRoutes.get('/logs', AdminController.logs);
 adminRoutes.get('/logs/export', AdminController.logsExport);
+adminRoutes.get('/analytics/province-heatmap', AdminController.provinceHeatmap);
+adminRoutes.get('/analytics/conversations/series', AdminController.conversationSeries);
+adminRoutes.get('/analytics/conversations/agents', AdminController.conversationAgents);
 

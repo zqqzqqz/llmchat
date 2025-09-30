@@ -1,7 +1,8 @@
 import axios from 'axios';
 import { useAuthStore } from '@/store/authStore';
 import { toast } from '@/components/ui/Toast';
-import { Agent, OriginalChatMessage, ChatOptions, ChatResponse } from '@/types';
+import { translate } from '@/i18n';
+import { Agent, OriginalChatMessage, ChatOptions, ChatResponse, ChatAttachmentMetadata } from '@/types';
 
 export const api = axios.create({
   baseURL: '/api',
@@ -10,6 +11,23 @@ export const api = axios.create({
     'Content-Type': 'application/json',
   },
 });
+
+async function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = reader.result;
+      if (typeof result === 'string') {
+        const base64 = result.includes(',') ? result.split(',')[1] : result;
+        resolve(base64);
+      } else {
+        reject(new Error(translate('无法读取文件内容')));
+      }
+    };
+    reader.onerror = () => reject(reader.error || new Error(translate('文件读取失败')));
+    reader.readAsDataURL(blob);
+  });
+}
 
 // 请求拦截器：自动附加 Authorization
 api.interceptors.request.use((config) => {
@@ -25,22 +43,22 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    console.error('API请求错误:', error);
+    console.error(translate('API请求错误'), error);
     const status = error?.response?.status;
     if (status === 401) {
       // 统一登出并跳转登录
       const { logout } = useAuthStore.getState();
       logout();
-      toast({ type: 'warning', title: '登录状态已过期，请重新登录' });
+      toast({ type: 'warning', title: translate('登录状态已过期，请重新登录') });
       const target = window.location.pathname + (window.location.search || '');
       window.location.assign(`/login?redirect=${encodeURIComponent(target)}`);
       return Promise.reject(error);
     }
     // 网络错误与超时提示
     if (error.code === 'ECONNABORTED' || (typeof error.message === 'string' && error.message.includes('timeout'))) {
-      error.message = '请求超时，请检查网络连接';
+      error.message = translate('请求超时，请检查网络连接');
     } else if (error.code === 'ERR_NETWORK') {
-      error.message = '网络连接失败，请检查后端服务是否启动';
+      error.message = translate('网络连接失败，请检查后端服务是否启动');
     }
     return Promise.reject(error);
   }
@@ -58,13 +76,13 @@ export const agentService = {
   },
 
   async checkAgentStatus(id: string) {
-    console.log('检查智能体状态:', id);
+    console.log(translate('检查智能体状态'), id);
     try {
       const response = await api.get(`/agents/${id}/status`);
-      console.log('智能体状态响应:', response.data);
+      console.log(translate('智能体状态响应'), response.data);
       return response.data.data;
     } catch (error) {
-      console.error('检查智能体状态失败:', error);
+      console.error(translate('检查智能体状态失败'), error);
       throw error;
     }
   },
@@ -76,16 +94,19 @@ export const chatService = {
     messages: OriginalChatMessage[],
     options?: ChatOptions
   ): Promise<ChatResponse> {
+    const { attachments, voiceNote, ...restOptions } = options || {};
     const response = await api.post('/chat/completions', {
       agentId,
       messages,
       stream: false,
-      ...(options?.chatId ? { chatId: options.chatId } : {}),
-      ...(typeof options?.detail === 'boolean' ? { detail: options.detail } : {}),
-      ...(typeof options?.temperature === 'number' ? { temperature: options.temperature } : {}),
-      ...(typeof options?.maxTokens === 'number' ? { maxTokens: options.maxTokens } : {}),
-      ...(options?.variables ? { variables: options.variables } : {}),
-      ...(options?.responseChatItemId ? { responseChatItemId: options.responseChatItemId } : {}),
+      ...(restOptions.chatId ? { chatId: restOptions.chatId } : {}),
+      ...(typeof restOptions.detail === 'boolean' ? { detail: restOptions.detail } : {}),
+      ...(typeof restOptions.temperature === 'number' ? { temperature: restOptions.temperature } : {}),
+      ...(typeof restOptions.maxTokens === 'number' ? { maxTokens: restOptions.maxTokens } : {}),
+      ...(restOptions.variables ? { variables: restOptions.variables } : {}),
+      ...(restOptions.responseChatItemId ? { responseChatItemId: restOptions.responseChatItemId } : {}),
+      ...(attachments && attachments.length ? { attachments } : {}),
+      ...(voiceNote ? { voiceNote } : {}),
     });
     return response.data.data;
   },
@@ -93,13 +114,31 @@ export const chatService = {
   async sendStreamMessage(
     agentId: string,
     messages: OriginalChatMessage[],
-    onChunk: (chunk: string) => void,
-    onStatus?: (status: any) => void,
-    options?: ChatOptions,
-    onInteractive?: (data: any) => void,
-    onChatId?: (chatId: string) => void
+    callbacks: {
+      onChunk: (chunk: string) => void;
+      onStatus?: (status: any) => void;
+      onInteractive?: (data: any) => void;
+      onChatId?: (chatId: string) => void;
+      signal?: AbortSignal;
+    },
+    options?: ChatOptions
   ): Promise<void> {
-    console.log('发送流式消息请求:', { agentId, messageCount: messages.length, options });
+    const { onChunk, onStatus, onInteractive, onChatId, signal } = callbacks;
+    const { attachments, voiceNote, ...restOptions } = options || {};
+
+    const payload = {
+      agentId,
+      messages,
+      stream: true,
+      ...(restOptions.chatId ? { chatId: restOptions.chatId } : {}),
+      ...(typeof restOptions.detail === 'boolean' ? { detail: restOptions.detail } : {}),
+      ...(typeof restOptions.temperature === 'number' ? { temperature: restOptions.temperature } : {}),
+      ...(typeof restOptions.maxTokens === 'number' ? { maxTokens: restOptions.maxTokens } : {}),
+      ...(restOptions.variables ? { variables: restOptions.variables } : {}),
+      ...(restOptions.responseChatItemId ? { responseChatItemId: restOptions.responseChatItemId } : {}),
+      ...(attachments && attachments.length ? { attachments } : {}),
+      ...(voiceNote ? { voiceNote } : {}),
+    };
 
     const authToken = useAuthStore.getState().token;
     const response = await fetch('/api/chat/completions', {
@@ -109,24 +148,15 @@ export const chatService = {
         'Accept': 'text/event-stream',
         ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {}),
       },
-      body: JSON.stringify({
-        agentId,
-        messages,
-        stream: true,
-        ...(options?.chatId ? { chatId: options.chatId } : {}),
-        ...(typeof options?.detail === 'boolean' ? { detail: options.detail } : {}),
-        ...(typeof options?.temperature === 'number' ? { temperature: options.temperature } : {}),
-        ...(typeof options?.maxTokens === 'number' ? { maxTokens: options.maxTokens } : {}),
-        ...(options?.variables ? { variables: options.variables } : {}),
-        ...(options?.responseChatItemId ? { responseChatItemId: options.responseChatItemId } : {}),
-      }),
+      body: JSON.stringify(payload),
+      signal,
     });
 
     if (!response.ok) {
       if (response.status === 401) {
         const { logout } = useAuthStore.getState();
         logout();
-        toast({ type: 'warning', title: '登录状态已过期，请重新登录' });
+        toast({ type: 'warning', title: translate('登录状态已过期，请重新登录') });
         const target = window.location.pathname + (window.location.search || '');
         window.location.assign(`/login?redirect=${encodeURIComponent(target)}`);
         return;
@@ -145,15 +175,10 @@ export const chatService = {
     let currentEventType = ''; // 追踪当前事件类型
     let buffer = '';
 
-    console.log('开始读取 SSE 流...');
-
     try {
       while (true) {
         const { done, value } = await reader.read();
-        if (done) {
-          console.log('SSE 流读取完成');
-          break;
-        }
+        if (done) break;
 
         const chunk = decoder.decode(value);
         buffer += chunk;
@@ -169,12 +194,9 @@ export const chatService = {
             continue;
           }
 
-          console.log('处理 SSE 行:', line);
-
           // 处理 SSE 事件类型
           if (line.startsWith('event: ')) {
             currentEventType = line.slice(7).trim();
-            console.log('设置事件类型:', currentEventType);
             continue;
           }
 
@@ -183,13 +205,11 @@ export const chatService = {
             const dataStr = line.slice(6);
 
             if (dataStr === '[DONE]') {
-              console.log('收到完成信号');
               return;
             }
 
             try {
               const data = JSON.parse(dataStr);
-              console.log('解析 SSE 数据:', { eventType: currentEventType, data });
 
               // 根据事件类型处理数据
               switch (currentEventType) {
@@ -210,7 +230,7 @@ export const chatService = {
                   const statusData = {
                     type: 'flowNodeStatus',
                     status: data.status || 'running',
-                    moduleName: data.name || data.moduleName || '未知模块'
+                    moduleName: data.name || data.moduleName || translate('未知模块')
                   };
                   onStatus?.(statusData);
                   break;
@@ -239,7 +259,7 @@ export const chatService = {
                   }
               }
             } catch (parseError) {
-              console.warn('解析 SSE 数据失败:', parseError, '原始数据:', dataStr);
+              console.warn(translate('解析 SSE 数据失败'), parseError, translate('原始数据'), dataStr);
             }
           }
         }
@@ -266,7 +286,8 @@ export const chatService = {
     agentId: string,
     chatId: string | undefined,
     onChunk: (chunk: string) => void,
-    onComplete?: (data: any) => void
+    onComplete?: (data: any) => void,
+    opts?: { signal?: AbortSignal }
   ): Promise<void> {
     const search = new URLSearchParams({ appId: agentId, stream: 'true' });
     if (chatId) search.set('chatId', chatId);
@@ -278,13 +299,14 @@ export const chatService = {
         'Accept': 'text/event-stream',
         ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {}),
       },
+      signal: opts?.signal,
     });
 
     if (!response.ok) {
       if (response.status === 401) {
         const { logout } = useAuthStore.getState();
         logout();
-        toast({ type: 'warning', title: '登录状态已过期，请重新登录' });
+        toast({ type: 'warning', title: translate('登录状态已过期，请重新登录') });
         const target = window.location.pathname + (window.location.search || '');
         window.location.assign(`/login?redirect=${encodeURIComponent(target)}`);
         return;
@@ -339,7 +361,7 @@ export const chatService = {
                   break;
               }
             } catch (e) {
-              console.warn('解析 Init SSE 数据失败:', e, '原始数据:', dataStr);
+              console.warn(translate('解析 Init SSE 数据失败'), e, translate('原始数据'), dataStr);
             }
           }
         }
@@ -366,9 +388,32 @@ export const chatService = {
       };
       await api.post('/chat/feedback', payload);
     } catch (e) {
-      console.error('提交点赞/点踩反馈失败:', e);
+      console.error(translate('提交点赞/点踩反馈失败'), e);
       throw e;
     }
   }
 
 };
+
+export async function uploadAttachment(
+  file: File | Blob,
+  opts?: { source?: 'upload' | 'voice'; filename?: string }
+): Promise<ChatAttachmentMetadata> {
+  const base64 = await blobToBase64(file);
+  const name = opts?.filename || ('name' in file ? (file as File).name : 'attachment');
+  const mimeType = 'type' in file && file.type ? file.type : 'application/octet-stream';
+  const size = 'size' in file && typeof file.size === 'number' ? file.size : base64.length * 0.75;
+
+  const { data } = await api.post<{ success: boolean; data: ChatAttachmentMetadata }>(
+    '/chat/attachments',
+    {
+      filename: name,
+      mimeType,
+      size,
+      data: base64,
+      source: opts?.source ?? 'upload',
+    }
+  );
+
+  return data.data;
+}

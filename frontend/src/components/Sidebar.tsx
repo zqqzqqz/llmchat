@@ -1,5 +1,4 @@
 import React, { useState, useRef } from 'react';
-import { Dialog } from '@/components/ui/Dialog';
 import {
   MessageSquare,
   Plus,
@@ -15,6 +14,7 @@ import { Button } from '@/components/ui/Button';
 import { IconButton } from '@/components/ui/IconButton';
 import { useChatStore } from '@/store/chatStore';
 import { ChatSession } from '@/types';
+import { useI18n } from '@/i18n';
 
 interface SidebarProps {
   className?: string;
@@ -33,6 +33,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => {
     renameSession,
     clearCurrentAgentSessions,
   } = useChatStore();
+  const { t, locale } = useI18n();
 
   // huihua.md 要求：根据当前智能体id从localStorage获取会话列表并显示
   const sessionsToDisplay = currentAgent ? (agentSessions[currentAgent.id] || []) : [];
@@ -43,8 +44,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => {
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
   const [touchStartY, setTouchStartY] = useState<number | null>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
-
-  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   const handleStartEdit = (session: ChatSession) => {
     setEditingId(session.id);
@@ -66,7 +65,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => {
 
   const handleDeleteSession = (sessionId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (confirm('确定要删除这个对话吗？')) {
+    if (confirm(t('确定要删除这个对话吗？'))) {
       deleteSession(sessionId);
     }
   };
@@ -121,7 +120,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => {
   };
 
   const formatTime = (date: Date) => {
-    return new Date(date).toLocaleTimeString('zh-CN', {
+    return new Date(date).toLocaleTimeString(locale, {
       hour: '2-digit',
       minute: '2-digit'
     });
@@ -270,7 +269,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => {
             className="w-full flex items-center gap-3 font-medium"
           >
             <Plus className="h-5 w-5" />
-            新建对话
+            {t('新建对话')}
           </Button>
 
           {/* 隐藏清空对话按钮（业务要求不展示） */}
@@ -282,7 +281,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => {
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <input
               type="text"
-              placeholder="搜索对话..."
+              placeholder={t('搜索对话...')}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 rounded-xl border border-input bg-background text-foreground placeholder-muted-foreground focus:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus:border-transparent"
@@ -295,28 +294,28 @@ export const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => {
           {sessionsToDisplay.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p>还没有对话</p>
-              <p className="text-sm">点击“新建对话”开始聊天</p>
+              <p>{t('还没有对话')}</p>
+              <p className="text-sm">{t('点击“新建对话”开始聊天')}</p>
             </div>
           ) : (
             <div>
               <SessionGroup
-                title="今天"
+                title={t('今天')}
                 sessions={groupedSessions.today}
                 icon={<Clock className="h-3 w-3" />}
               />
               <SessionGroup
-                title="昨天"
+                title={t('昨天')}
                 sessions={groupedSessions.yesterday}
                 icon={<Clock className="h-3 w-3" />}
               />
               <SessionGroup
-                title="本周"
+                title={t('本周')}
                 sessions={groupedSessions.thisWeek}
                 icon={<Calendar className="h-3 w-3" />}
               />
               <SessionGroup
-                title="更早"
+                title={t('更早')}
                 sessions={groupedSessions.older}
                 icon={<Calendar className="h-3 w-3" />}
               />

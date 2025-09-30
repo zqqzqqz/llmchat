@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/Input";
 import { loginApi } from "@/services/authApi";
 import { useAuthStore } from "@/store/authStore";
 import { toast } from "@/components/ui/Toast";
+import { useI18n } from "@/i18n";
 
 export default function LoginPage({ onSuccess }: { onSuccess?: () => void }) {
   const [showPassword, setShowPassword] = useState(false);
@@ -15,6 +16,7 @@ export default function LoginPage({ onSuccess }: { onSuccess?: () => void }) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const login = useAuthStore((s) => s.login);
+  const { t } = useI18n();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,11 +25,12 @@ export default function LoginPage({ onSuccess }: { onSuccess?: () => void }) {
     try {
       const data = await loginApi(username, password);
       login(data);
-      toast({ type: 'success', title: '登录成功' });
+      toast({ type: 'success', title: t('登录成功') });
       onSuccess?.();
     } catch (err) {
-      setError("用户名或密码错误");
-      toast({ type: 'error', title: '登录失败', description: '用户名或密码错误' });
+      const message = t('用户名或密码错误');
+      setError(message);
+      toast({ type: 'error', title: t('登录失败'), description: message });
     } finally {
       setIsLoading(false);
     }
@@ -51,8 +54,8 @@ export default function LoginPage({ onSuccess }: { onSuccess?: () => void }) {
             <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-[var(--brand)] to-[var(--brand)]/80 flex items-center justify-center shadow-lg">
               <span className="text-2xl font-bold text-white">V5</span>
             </div>
-            <h1 className="text-2xl font-bold text-foreground mb-2">欢迎回来</h1>
-            <p className="text-muted-foreground">登录到管理后台</p>
+            <h1 className="text-2xl font-bold text-foreground mb-2">{t('欢迎回来')}</h1>
+            <p className="text-muted-foreground">{t('登录到管理后台')}</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
@@ -62,13 +65,13 @@ export default function LoginPage({ onSuccess }: { onSuccess?: () => void }) {
               </div>
             )}
             <div>
-              <label className="block text-sm font-medium text-foreground mb-2">用户名</label>
+              <label className="block text-sm font-medium text-foreground mb-2">{t('用户名')}</label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                 <Input
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="输入用户名"
+                  placeholder={t('输入用户名')}
                   className="pl-11 h-12 rounded-xl border-border/30 bg-background/50 backdrop-blur-sm focus:border-[var(--brand)]/50 focus:ring-[var(--brand)]/20"
                   required
                 />
@@ -76,14 +79,14 @@ export default function LoginPage({ onSuccess }: { onSuccess?: () => void }) {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-foreground mb-2">密码</label>
+              <label className="block text-sm font-medium text-foreground mb-2">{t('密码')}</label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                 <Input
                   type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="输入密码"
+                  placeholder={t('输入密码')}
                   className="pl-11 pr-11 h-12 rounded-xl border-border/30 bg-background/50 backdrop-blur-sm focus:border-[var(--brand)]/50 focus:ring-[var(--brand)]/20"
                   required
                 />
@@ -102,7 +105,7 @@ export default function LoginPage({ onSuccess }: { onSuccess?: () => void }) {
               disabled={isLoading}
               className="w-full h-12 rounded-xl bg-gradient-to-r from-[var(--brand)] to-[var(--brand)]/90 hover:from-[var(--brand)]/90 hover:to-[var(--brand)]/80 text-white font-semibold shadow-lg"
             >
-              {isLoading ? "登录中..." : "登录"}
+              {isLoading ? t('登录中...') : t('登录')}
             </Button>
           </form>
         </div>
