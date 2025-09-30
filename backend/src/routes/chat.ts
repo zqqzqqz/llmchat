@@ -19,4 +19,7 @@ router.get('/history/:sessionId', chatController.getChatHistory);
 // POST /api/chat/feedback
 router.post('/feedback', chatController.updateUserFeedback);
 
+// 上传附件（文件/语音）
+router.post('/attachments', chatController.uploadAttachment);
+
 export { router as chatRoutes };

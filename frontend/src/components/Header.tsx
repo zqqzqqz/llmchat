@@ -3,10 +3,13 @@ import { Menu } from 'lucide-react';
 import { IconButton } from '@/components/ui/IconButton';
 import { AgentSelector } from './agents/AgentSelector';
 import { ThemeToggle } from './theme/ThemeToggle';
+import { LanguageSwitcher } from '@/components/i18n/LanguageSwitcher';
 import { useChatStore } from '@/store/chatStore';
+import { useI18n } from '@/i18n';
 
 export const Header: React.FC = () => {
   const { sidebarOpen, setSidebarOpen } = useChatStore();
+  const { t } = useI18n();
 
   return (
     <header className="sticky top-0 z-40 w-full backdrop-blur-xl bg-background/90 border-b border-border/50 px-4 py-3">
@@ -17,7 +20,7 @@ export const Header: React.FC = () => {
             onClick={() => setSidebarOpen(!sidebarOpen)}
             variant="glass"
             radius="lg"
-            aria-label="切换侧边栏"
+            aria-label={t('切换侧边栏')}
           >
             <Menu className="h-5 w-5 text-brand drop-shadow-sm" />
           </IconButton>
@@ -29,7 +32,8 @@ export const Header: React.FC = () => {
         </div>
 
         {/* 右侧：主题切换 */}
-        <div className="flex items-center">
+        <div className="flex items-center gap-1">
+          <LanguageSwitcher />
           <ThemeToggle />
         </div>
       </div>
